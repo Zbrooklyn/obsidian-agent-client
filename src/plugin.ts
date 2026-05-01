@@ -108,6 +108,16 @@ export interface AgentClientPluginSettings {
 	};
 	// Locally saved session metadata (for agents without session/list support)
 	savedSessions: SavedSessionInfo[];
+	// Auto-resume the last active session when the chat view opens.
+	// On by default. Falls back to a fresh session if restore fails.
+	autoResumeLastSession: boolean;
+	// Pointer to the most recent active session for auto-resume.
+	// Updated whenever a session becomes ready in any chat view.
+	lastActiveSession: {
+		agentId: string;
+		sessionId: string;
+		cwd: string;
+	} | null;
 	// Last used model per agent (agentId → modelId)
 	lastUsedModels: Record<string, string>;
 	// Last used mode per agent (agentId → modeId)
@@ -176,6 +186,8 @@ const DEFAULT_SETTINGS: AgentClientPluginSettings = {
 		fontSize: null,
 	},
 	savedSessions: [],
+	autoResumeLastSession: true,
+	lastActiveSession: null,
 	lastUsedModels: {},
 	lastUsedModes: {},
 	enableFloatingChat: false,
@@ -993,6 +1005,26 @@ export default class AgentClientPlugin extends Plugin {
 			savedSessions: Array.isArray(raw.savedSessions)
 				? (raw.savedSessions as SavedSessionInfo[])
 				: D.savedSessions,
+			autoResumeLastSession: bool(
+				raw.autoResumeLastSession,
+				D.autoResumeLastSession,
+			),
+			lastActiveSession: (() => {
+				const s = obj(raw.lastActiveSession);
+				if (
+					s &&
+					typeof s.agentId === "string" &&
+					typeof s.sessionId === "string" &&
+					typeof s.cwd === "string"
+				) {
+					return {
+						agentId: s.agentId,
+						sessionId: s.sessionId,
+						cwd: s.cwd,
+					};
+				}
+				return D.lastActiveSession;
+			})(),
 			lastUsedModels: strRecord(raw.lastUsedModels),
 			lastUsedModes: strRecord(raw.lastUsedModes),
 			// Migration: enableFloatingChat ← showFloatingButton (old name)
