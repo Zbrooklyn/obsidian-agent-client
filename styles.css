@@ -1674,18 +1674,22 @@ If your plugin does not need CSS, delete this file.
 
 /* ===== Session History Modal ===== */
 .agent-client-session-history-filter {
-	margin-bottom: 16px;
-	padding-bottom: 12px;
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+	margin-bottom: 20px;
+	padding-bottom: 14px;
 	border-bottom: 1px solid var(--background-modifier-border);
 }
 
 .agent-client-session-history-filter-label {
 	display: flex;
 	align-items: center;
-	gap: 8px;
+	gap: 10px;
 	cursor: pointer;
 	font-size: 14px;
 	color: var(--text-normal);
+	line-height: 1.4;
 }
 
 .agent-client-session-history-filter-label input[type="checkbox"] {
@@ -1695,14 +1699,14 @@ If your plugin does not need CSS, delete this file.
 .agent-client-session-history-list {
 	display: flex;
 	flex-direction: column;
-	gap: 8px;
+	gap: 10px;
 }
 
 .agent-client-session-history-item {
 	display: flex;
 	align-items: center;
 	justify-content: space-between;
-	padding: 12px;
+	padding: 14px 16px;
 	background: var(--background-secondary);
 	border-radius: 6px;
 	border: 1px solid var(--background-modifier-border);
@@ -1717,7 +1721,8 @@ If your plugin does not need CSS, delete this file.
 	font-weight: 500;
 	font-size: 14px;
 	color: var(--text-normal);
-	margin-bottom: 4px;
+	margin-bottom: 6px;
+	line-height: 1.4;
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
