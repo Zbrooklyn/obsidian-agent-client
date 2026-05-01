@@ -573,11 +573,70 @@ export function ChatPanel({
 	// ============================================================
 	// Effects - Session Lifecycle
 	// ============================================================
-	// Initialize session on mount
+	// Initialize session on mount. If auto-resume is on and a recent
+	// session matches the agent we're about to start, try to restore it
+	// first. Fall back to a fresh session on any restore error.
 	useEffect(() => {
+		const targetAgentId = config?.agent || initialAgentId;
+		const settings = plugin.settings;
+		const candidate = settings.lastActiveSession;
+		const shouldTryResume =
+			settings.autoResumeLastSession &&
+			candidate &&
+			candidate.agentId === targetAgentId;
+
+		if (shouldTryResume) {
+			logger.log(
+				`[Debug] Auto-resume: attempting restore of ${candidate.sessionId}`,
+			);
+			void (async () => {
+				try {
+					await sessionHistory.restoreSession(
+						candidate.sessionId,
+						candidate.cwd,
+					);
+				} catch (err) {
+					logger.log(
+						`[Debug] Auto-resume failed, creating fresh session: ${String(err)}`,
+					);
+					void agent.createSession(targetAgentId);
+				}
+			})();
+			return;
+		}
+
 		logger.log("[Debug] Starting connection setup via useSession...");
-		void agent.createSession(config?.agent || initialAgentId);
+		void agent.createSession(targetAgentId);
+		// We intentionally read plugin.settings imperatively above; we don't
+		// want to re-run this effect on every settings change (only on mount
+		// and agent change). Linting around this is configured globally.
+		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [agent.createSession, config?.agent, initialAgentId]);
+
+	// Persist the active session as the last-active for auto-resume on
+	// next launch. Skips writes when the same triple is already stored.
+	useEffect(() => {
+		if (!session.sessionId || !session.agentId) return;
+		const cwd = agentCwd;
+		if (!cwd) return;
+
+		const current = plugin.settings.lastActiveSession;
+		if (
+			current &&
+			current.agentId === session.agentId &&
+			current.sessionId === session.sessionId &&
+			current.cwd === cwd
+		) {
+			return;
+		}
+
+		plugin.settings.lastActiveSession = {
+			agentId: session.agentId,
+			sessionId: session.sessionId,
+			cwd,
+		};
+		void plugin.saveSettings();
+	}, [session.sessionId, session.agentId, agentCwd, plugin]);
 
 	// Apply configured model when session is ready
 	useEffect(() => {
