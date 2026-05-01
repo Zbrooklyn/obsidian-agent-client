@@ -517,6 +517,7 @@ function SessionHistoryContent({
 }: SessionHistoryContentProps) {
 	const [filterByCurrentVault, setFilterByCurrentVault] = useState(true);
 	const [hideNonLocalSessions, setHideNonLocalSessions] = useState(false);
+	const [searchQuery, setSearchQuery] = useState("");
 
 	const handleFilterChange = useCallback(
 		(e: React.ChangeEvent<HTMLInputElement>) => {
@@ -570,14 +571,30 @@ function SessionHistoryContent({
 		[app, sessions, currentCwd, onEditTitle],
 	);
 
-	// Filter sessions based on hideNonLocalSessions setting
-	// Only applies to agent session/list (not local sessions which are already filtered)
+	// Filter sessions: hideNonLocalSessions toggle (agent list only) +
+	// case-insensitive substring search against session title.
 	const filteredSessions = React.useMemo(() => {
-		if (isUsingLocalSessions || !hideNonLocalSessions) {
-			return sessions;
+		let result = sessions;
+
+		if (!isUsingLocalSessions && hideNonLocalSessions) {
+			result = result.filter((s) => localSessionIds.has(s.sessionId));
 		}
-		return sessions.filter((s) => localSessionIds.has(s.sessionId));
-	}, [sessions, isUsingLocalSessions, hideNonLocalSessions, localSessionIds]);
+
+		const trimmed = searchQuery.trim().toLowerCase();
+		if (trimmed) {
+			result = result.filter((s) =>
+				(s.title ?? "").toLowerCase().includes(trimmed),
+			);
+		}
+
+		return result;
+	}, [
+		sessions,
+		isUsingLocalSessions,
+		hideNonLocalSessions,
+		localSessionIds,
+		searchQuery,
+	]);
 
 	// Show preparing message if agent is not ready
 	if (!isAgentReady) {
@@ -638,6 +655,36 @@ function SessionHistoryContent({
 
 			{canShowList && (
 				<>
+					{/* Search input - filters visible sessions by title (case-insensitive) */}
+					<div className="agent-client-session-history-search">
+						<span
+							className="agent-client-session-history-search-icon"
+							ref={(el) => {
+								if (el) setIcon(el, "search");
+							}}
+							aria-hidden="true"
+						/>
+						<input
+							type="text"
+							className="agent-client-session-history-search-input"
+							placeholder="Search sessions by title..."
+							value={searchQuery}
+							onChange={(e) => setSearchQuery(e.target.value)}
+							aria-label="Search sessions"
+						/>
+						{searchQuery && (
+							<button
+								type="button"
+								className="agent-client-session-history-search-clear"
+								onClick={() => setSearchQuery("")}
+								aria-label="Clear search"
+								ref={(el) => {
+									if (el) setIcon(el, "x");
+								}}
+							/>
+						)}
+					</div>
+
 					{/* Filter toggles - only for agent session/list */}
 					{canList && !isUsingLocalSessions && (
 						<div className="agent-client-session-history-filter">
