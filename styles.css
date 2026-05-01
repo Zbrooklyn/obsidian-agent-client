@@ -1583,6 +1583,82 @@ If your plugin does not need CSS, delete this file.
 }
 
 /* ===== Session History Modal ===== */
+
+/* Search input — case-insensitive title filter */
+.agent-client-session-history-search {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin-bottom: 14px;
+	padding: 8px 12px;
+	background: var(--background-modifier-form-field);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 6px;
+	transition: border-color 0.1s ease, box-shadow 0.1s ease;
+}
+
+.agent-client-session-history-search:focus-within {
+	border-color: var(--interactive-accent);
+}
+
+.agent-client-session-history-search-icon {
+	display: inline-flex;
+	align-items: center;
+	color: var(--text-faint);
+	flex-shrink: 0;
+}
+
+.agent-client-session-history-search-icon svg {
+	width: 14px;
+	height: 14px;
+}
+
+.agent-client-session-history-search-input {
+	flex: 1 1 auto;
+	min-width: 0;
+	background: transparent !important;
+	border: none !important;
+	outline: none !important;
+	box-shadow: none !important;
+	padding: 0 !important;
+	margin: 0 !important;
+	font-size: 14px;
+	color: var(--text-normal);
+	line-height: 1.4;
+}
+
+.agent-client-session-history-search-input::placeholder {
+	color: var(--text-faint);
+}
+
+.agent-client-session-history-search-clear {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 18px;
+	height: 18px;
+	padding: 0 !important;
+	margin: 0 !important;
+	background: transparent !important;
+	border: none !important;
+	border-radius: 3px;
+	box-shadow: none !important;
+	color: var(--text-faint);
+	cursor: pointer;
+	flex-shrink: 0;
+	transition: color 0.1s ease, background-color 0.1s ease;
+}
+
+.agent-client-session-history-search-clear:hover {
+	color: var(--text-normal);
+	background-color: var(--background-modifier-hover) !important;
+}
+
+.agent-client-session-history-search-clear svg {
+	width: 12px;
+	height: 12px;
+}
+
 .agent-client-session-history-filter {
 	display: flex;
 	flex-direction: column;
