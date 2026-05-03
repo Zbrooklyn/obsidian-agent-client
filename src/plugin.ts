@@ -4,6 +4,7 @@ import {
 	WorkspaceSplit,
 	Notice,
 	requestUrl,
+	FileSystemAdapter,
 } from "obsidian";
 import * as semver from "semver";
 import { ChatView, VIEW_TYPE_CHAT } from "./ui/ChatView";
@@ -19,6 +20,10 @@ import {
 } from "./services/settings-service";
 import { AgentClientSettingTab } from "./ui/SettingsTab";
 import { AcpClient } from "./acp/acp-client";
+import {
+	findAgentSettings,
+	buildAgentConfigWithApiKey,
+} from "./services/session-helpers";
 import {
 	sanitizeArgs,
 	normalizeEnvVars,
@@ -41,7 +46,7 @@ import {
 	CustomAgentSettings,
 } from "./types/agent";
 import type { SavedSessionInfo } from "./types/session";
-import { initializeLogger } from "./utils/logger";
+import { initializeLogger, getLogger } from "./utils/logger";
 
 // Re-export for backward compatibility
 export type { AgentEnvVar, CustomAgentSettings };
@@ -108,6 +113,10 @@ export interface AgentClientPluginSettings {
 	};
 	// Locally saved session metadata (for agents without session/list support)
 	savedSessions: SavedSessionInfo[];
+	// Eager warm-up: pre-spawn the default agent on plugin load so the
+	// first chat view opens with a near-zero perceived latency.
+	// On by default; toggle off to defer all spawn cost until first click.
+	eagerWarmUp: boolean;
 	// Last used model per agent (agentId → modelId)
 	lastUsedModels: Record<string, string>;
 	// Last used mode per agent (agentId → modeId)
@@ -176,6 +185,7 @@ const DEFAULT_SETTINGS: AgentClientPluginSettings = {
 		fontSize: null,
 	},
 	savedSessions: [],
+	eagerWarmUp: true,
 	lastUsedModels: {},
 	lastUsedModes: {},
 	enableFloatingChat: false,
@@ -194,6 +204,10 @@ export default class AgentClientPlugin extends Plugin {
 
 	/** Map of viewId to AcpClient for multi-session support */
 	private _acpClients: Map<string, AcpClient> = new Map();
+	// Eager warm-up cache. Set by warmUpDefaultAgent(); consumed by the
+	// first getOrCreateAcpClient() call. Null if warm-up is disabled,
+	// failed, or has already been adopted.
+	private _warmAcpClient: AcpClient | null = null;
 	/** Floating button container (independent from chat view instances) */
 	private floatingButton: FloatingButtonContainer | null = null;
 	/** Counter for generating unique floating chat instance IDs */
@@ -341,8 +355,28 @@ export default class AgentClientPlugin extends Plugin {
 					});
 				}
 				this._acpClients.clear();
+				if (this._warmAcpClient) {
+					this._warmAcpClient.disconnect().catch(() => {
+						// Ignore — quitting anyway
+					});
+					this._warmAcpClient = null;
+				}
 			}),
 		);
+
+		// Eager warm-up: pre-spawn the default agent in the background after
+		// Obsidian has settled. The first chat view to open adopts this warm
+		// client and skips the ~8s spawn+handshake user-perceived wait.
+		if (this.settings.eagerWarmUp) {
+			this.app.workspace.onLayoutReady(() => {
+				// Defer further so we don't compete with other plugins'
+				// post-layout init work. 1.5s is enough to clear most boot
+				// contention without making the warm-up feel slow to land.
+				window.setTimeout(() => {
+					void this.warmUpDefaultAgent();
+				}, 1500);
+			});
+		}
 	}
 
 	onunload() {
@@ -374,10 +408,77 @@ export default class AgentClientPlugin extends Plugin {
 	getOrCreateAcpClient(viewId: string): AcpClient {
 		let client = this._acpClients.get(viewId);
 		if (!client) {
-			client = new AcpClient(this);
+			// Adopt the prewarmed client if present — first chat view to mount
+			// gets the warm one with cached init+session results, so it opens
+			// near-instantly. Subsequent views fall through to fresh creation.
+			if (this._warmAcpClient) {
+				client = this._warmAcpClient;
+				this._warmAcpClient = null;
+				getLogger().log(
+					`[Plugin] Adopted prewarmed AcpClient for view ${viewId}`,
+				);
+			} else {
+				client = new AcpClient(this);
+			}
 			this._acpClients.set(viewId, client);
 		}
 		return client;
+	}
+
+	/**
+	 * Eager warm-up: pre-spawn the default agent in the background after
+	 * Obsidian boot, so the first chat view opens with near-zero perceived
+	 * latency. Failures are non-fatal — the next chat view falls back to
+	 * normal lazy spawn.
+	 */
+	private async warmUpDefaultAgent(): Promise<void> {
+		const logger = getLogger();
+		try {
+			const agentId = this.settings.defaultAgentId;
+			const agentSettings = findAgentSettings(this.settings, agentId);
+			if (!agentSettings) {
+				logger.log(
+					`[Plugin] Skip warm-up — no settings for ${agentId}`,
+				);
+				return;
+			}
+
+			// Use the vault root as the default cwd. If the user opens chat
+			// in a different cwd, the cache miss falls back to a real
+			// newSession — no harm done.
+			const adapter = this.app.vault.adapter;
+			const cwd =
+				adapter instanceof FileSystemAdapter
+					? adapter.getBasePath()
+					: "";
+			if (!cwd) {
+				logger.log("[Plugin] Skip warm-up — no resolvable vault path");
+				return;
+			}
+
+			const config = buildAgentConfigWithApiKey(
+				this.settings,
+				agentSettings,
+				agentId,
+				cwd,
+			);
+
+			const client = new AcpClient(this);
+			await client.prewarm(config, cwd);
+			this._warmAcpClient = client;
+			logger.log(`[Plugin] Warm-up ready — agent=${agentId} cwd=${cwd}`);
+		} catch (err) {
+			logger.error("[Plugin] Warm-up failed (non-fatal):", err);
+			// Best-effort cleanup so we don't leak the half-warmed client
+			if (this._warmAcpClient) {
+				try {
+					await this._warmAcpClient.disconnect();
+				} catch {
+					// Ignore — already broken
+				}
+				this._warmAcpClient = null;
+			}
+		}
 	}
 
 	/**
@@ -993,6 +1094,7 @@ export default class AgentClientPlugin extends Plugin {
 			savedSessions: Array.isArray(raw.savedSessions)
 				? (raw.savedSessions as SavedSessionInfo[])
 				: D.savedSessions,
+			eagerWarmUp: bool(raw.eagerWarmUp, D.eagerWarmUp),
 			lastUsedModels: strRecord(raw.lastUsedModels),
 			lastUsedModes: strRecord(raw.lastUsedModes),
 			// Migration: enableFloatingChat ← showFloatingButton (old name)

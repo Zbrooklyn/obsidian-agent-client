@@ -68,6 +68,14 @@ export class AcpClient {
 	private currentAgentId: string | null = null;
 	private currentSessionId: string | null = null;
 
+	// Eager warm-up cache. Populated by prewarm() so the first subsequent
+	// initialize() / newSession() call returns these instantly instead of
+	// re-running the spawn + handshake.
+	private pendingInitResult: InitializeResult | null = null;
+	private pendingInitAgentId: string | null = null;
+	private pendingSessionResult: SessionResult | null = null;
+	private pendingSessionCwd: string | null = null;
+
 	// Callbacks (none — all events flow through onSessionUpdate via AcpHandler)
 
 	// Delegates
@@ -108,6 +116,23 @@ export class AcpClient {
 	 * Spawns the agent process and establishes ACP connection.
 	 */
 	async initialize(config: AgentConfig): Promise<InitializeResult> {
+		// Eager warm-up adoption: if prewarm() already initialized this client
+		// with the same agent, return the cached result instantly.
+		if (
+			this.pendingInitResult &&
+			this.pendingInitAgentId === config.id &&
+			this.isInitializedFlag &&
+			this.currentAgentId === config.id
+		) {
+			const cached = this.pendingInitResult;
+			this.pendingInitResult = null;
+			this.pendingInitAgentId = null;
+			this.logger.log(
+				"[AcpClient] Adopted prewarmed initialization (instant)",
+			);
+			return cached;
+		}
+
 		this.logger.log(
 			"[AcpClient] Starting initialization with config:",
 			config,
@@ -388,6 +413,23 @@ export class AcpClient {
 	 * Create a new chat session with the agent.
 	 */
 	async newSession(workingDirectory: string): Promise<SessionResult> {
+		// Eager warm-up adoption: if prewarm() created a session for this cwd,
+		// return it instantly. Single-use — next call falls through to a real
+		// newSession.
+		if (
+			this.pendingSessionResult &&
+			this.pendingSessionCwd === workingDirectory
+		) {
+			const cached = this.pendingSessionResult;
+			this.pendingSessionResult = null;
+			this.pendingSessionCwd = null;
+			this.currentSessionId = cached.sessionId;
+			this.logger.log(
+				"[AcpClient] Adopted prewarmed session (instant)",
+			);
+			return cached;
+		}
+
 		const connection = this.requireConnection();
 
 		try {
@@ -411,6 +453,37 @@ export class AcpClient {
 			this.logger.error("[AcpClient] New Session Error:", error);
 			throw error;
 		}
+	}
+
+	/**
+	 * Eager warm-up: spawn the agent process and create a first session in
+	 * the background, before any chat view is opened. The cached results are
+	 * adopted by the next initialize() / newSession() call with matching
+	 * agent + cwd, so user-perceived spawn latency drops to near-zero.
+	 *
+	 * Safe to call multiple times; subsequent calls with new agents/cwds
+	 * replace the pending cache.
+	 */
+	async prewarm(config: AgentConfig, cwd: string): Promise<void> {
+		this.logger.log(
+			`[AcpClient] Prewarming agent=${config.id} cwd=${cwd}`,
+		);
+
+		// Run real initialize and capture result before exposing as pending,
+		// so a concurrent initialize() call can't claim a half-baked entry.
+		const initResult = await this.initialize(config);
+		const sessionResult = await this.newSession(cwd);
+
+		// Reset internal "current" markers so the cache-adoption path inside
+		// initialize/newSession will return these — this client is "ready"
+		// but the public-facing handshake hasn't happened yet from the
+		// caller's perspective.
+		this.pendingInitResult = initResult;
+		this.pendingInitAgentId = config.id;
+		this.pendingSessionResult = sessionResult;
+		this.pendingSessionCwd = cwd;
+
+		this.logger.log("[AcpClient] Prewarm complete — cached for adoption");
 	}
 
 	/**
