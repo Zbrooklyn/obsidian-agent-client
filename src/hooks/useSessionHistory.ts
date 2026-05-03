@@ -514,24 +514,38 @@ export function useSessionHistory(
 			setLoading(true);
 			setError(null);
 
+			// Read capabilities FRESH at call time, not from the useMemo'd
+			// snapshot captured at render. Auto-resume on cold mount calls
+			// this before useAgentSession populates session.agentCapabilities,
+			// so we need to query the AcpClient directly to avoid a false
+			// "not supported" error.
+			const fromSession = session.agentCapabilities;
+			const fromClient = agentClient.getLastInitResult()?.agentCapabilities;
+			const freshCaps = getSessionCapabilityFlags(fromSession || fromClient);
+
 			try {
 				// IMPORTANT: Update session.sessionId BEFORE calling restore
 				// so that session/update notifications are not ignored
 				onSessionLoad(sessionId, undefined, undefined, undefined);
 
-				if (capabilities.canLoad) {
-					// Check local messages first to decide whether to use them or agent replay
-					const localMessages =
-						await settingsAccess.loadSessionMessages(sessionId);
+				// CACHED-RENDER FAST PATH: paint messages from local disk
+				// IMMEDIATELY, before any capability check or agent work.
+				// User sees their conversation in <100ms regardless of whether
+				// the agent is ready. If agent calls fail later, messages
+				// stay on screen (failure paths just don't repopulate them).
+				const localMessages =
+					await settingsAccess.loadSessionMessages(sessionId);
+				if (localMessages && onMessagesRestore) {
+					onIgnoreUpdates?.(true);
+					onClearMessages?.();
+					onMessagesRestore(localMessages);
+				}
 
+				if (freshCaps.canLoad) {
+					// Cached messages already rendered above. Now connect
+					// the agent in the foreground (still part of the
+					// awaited promise, but messages are visible to user).
 					if (localMessages && onMessagesRestore) {
-						// Cached-render path: paint messages from local disk
-						// IMMEDIATELY (no wait for agent), then connect agent in
-						// the background. Send-button is gated on session ready
-						// state elsewhere, so the user can read while we load.
-						onIgnoreUpdates?.(true);
-						onClearMessages?.();
-						onMessagesRestore(localMessages);
 						try {
 							const result = await agentClient.loadSession(
 								sessionId,
@@ -547,7 +561,8 @@ export function useSessionHistory(
 							onIgnoreUpdates?.(false);
 						}
 					} else {
-						// No local messages: let agent replay flow through to UI
+						// No local messages cached: let agent replay flow
+						// through to UI as before.
 						const result = await agentClient.loadSession(
 							sessionId,
 							cwd,
@@ -559,8 +574,8 @@ export function useSessionHistory(
 							result.configOptions,
 						);
 					}
-				} else if (capabilities.canResume) {
-					// Use resume (without history replay, restore from local storage)
+				} else if (freshCaps.canResume) {
+					// Cached messages already rendered above. Resume in foreground.
 					const result = await agentClient.resumeSession(
 						sessionId,
 						cwd,
@@ -571,13 +586,6 @@ export function useSessionHistory(
 						result.models,
 						result.configOptions,
 					);
-
-					// Resume doesn't return history, so restore from local storage
-					const localMessages =
-						await settingsAccess.loadSessionMessages(sessionId);
-					if (localMessages && onMessagesRestore) {
-						onMessagesRestore(localMessages);
-					}
 				} else {
 					throw new Error("Session restoration is not supported");
 				}

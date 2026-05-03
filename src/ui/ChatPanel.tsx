@@ -29,6 +29,9 @@ import { useSuggestions } from "../hooks/useSuggestions";
 import { useAgent } from "../hooks/useAgent";
 import { useSessionHistory } from "../hooks/useSessionHistory";
 
+// Diagnostic trace logger (file-based [WARMUP] log)
+import { warmupLog } from "../utils/warmup-trace";
+
 // Domain model imports
 import {
 	flattenConfigSelectOptions,
@@ -577,7 +580,8 @@ export function ChatPanel({
 	// session matches the agent we're about to start, try to restore it
 	// first. Fall back to a fresh session on any restore error.
 	useEffect(() => {
-		const targetAgentId = config?.agent || initialAgentId;
+		const targetAgentId =
+			config?.agent || initialAgentId || plugin.settings.defaultAgentId;
 		const settings = plugin.settings;
 		const candidate = settings.lastActiveSession;
 		const shouldTryResume =
@@ -585,21 +589,52 @@ export function ChatPanel({
 			candidate &&
 			candidate.agentId === targetAgentId;
 
+		warmupLog(
+			`[WARMUP] ${new Date().toISOString()} ChatPanel mount useEffect — shouldTryResume=${shouldTryResume} candidateId=${candidate?.sessionId} candidateAgent=${candidate?.agentId} targetAgent=${targetAgentId}`,
+		);
 		if (shouldTryResume) {
 			logger.log(
 				`[Debug] Auto-resume: attempting restore of ${candidate.sessionId}`,
 			);
+			warmupLog(
+				`[WARMUP] ${new Date().toISOString()} AUTO-RESUME attempt for session=${candidate.sessionId}`,
+			);
 			void (async () => {
+				const trace = (msg: string) =>
+					warmupLog(
+						`[WARMUP] ${new Date().toISOString()} ${msg}`,
+					);
 				try {
 					await sessionHistory.restoreSession(
 						candidate.sessionId,
 						candidate.cwd,
 					);
+					void trace(`AUTO-RESUME first attempt SUCCESS`);
 				} catch (err) {
-					logger.log(
-						`[Debug] Auto-resume failed, creating fresh session: ${String(err)}`,
+					void trace(
+						`AUTO-RESUME first attempt FAILED: ${String(err).slice(0, 150)}`,
 					);
-					void agent.createSession(targetAgentId);
+					// First attempt may race with warm-up: capability flags in
+					// useSessionHistory haven't populated yet, so the restore
+					// throws "Session restoration is not supported". Run
+					// createSession to force initialize() (populates caps) then
+					// retry restore exactly once.
+					logger.log(
+						`[Debug] Auto-resume first attempt failed, initializing then retrying: ${String(err)}`,
+					);
+					try {
+						await agent.createSession(targetAgentId);
+						void trace(`AUTO-RESUME retry: createSession done, retrying restore`);
+						await sessionHistory.restoreSession(
+							candidate.sessionId,
+							candidate.cwd,
+						);
+						void trace(`AUTO-RESUME retry SUCCESS`);
+					} catch (err2) {
+						void trace(
+							`AUTO-RESUME retry FAILED: ${String(err2).slice(0, 150)}`,
+						);
+					}
 				}
 			})();
 			return;
