@@ -84,6 +84,13 @@ export class AcpClient {
 	// Promise of an in-flight initialize() call. Concurrent calls await
 	// this rather than racing to kill each other's processes.
 	private initInFlight: Promise<InitializeResult> | null = null;
+	// Promise of an in-flight newSession() call, keyed implicitly by the
+	// owning AcpClient instance. A view adopting a warm client mid-prewarm
+	// joins this instead of opening a duplicate session.
+	private newSessionInFlight: {
+		cwd: string;
+		promise: Promise<SessionResult>;
+	} | null = null;
 
 	// Callbacks (none — all events flow through onSessionUpdate via AcpHandler)
 
@@ -508,11 +515,37 @@ export class AcpClient {
 			return cached;
 		}
 
+		// Coalesce: if a newSession is already in flight for the same cwd
+		// (warm-up's prewarm), join it instead of creating a duplicate.
+		// Critical for the layout-restored view scenario where the view
+		// mounts mid-prewarm.
+		if (
+			this.newSessionInFlight &&
+			this.newSessionInFlight.cwd === workingDirectory
+		) {
+			console.log(
+				`[WARMUP] ${new Date().toISOString()} newSession JOIN IN-FLIGHT — awaiting existing prewarm`,
+			);
+			return this.newSessionInFlight.promise;
+		}
+
 		console.log(
 			`[WARMUP] ${new Date().toISOString()} newSession CACHE MISS — running real newSession`,
 		);
 
 		const connection = this.requireConnection();
+
+		// Publish the in-flight Promise so concurrent callers (e.g. an
+		// adopting view) can join.
+		let resolveNS: (v: SessionResult) => void = () => {};
+		let rejectNS: (e: unknown) => void = () => {};
+		this.newSessionInFlight = {
+			cwd: workingDirectory,
+			promise: new Promise<SessionResult>((resolve, reject) => {
+				resolveNS = resolve;
+				rejectNS = reject;
+			}),
+		};
 
 		try {
 			this.logger.log("[AcpClient] Creating new session...");
@@ -530,9 +563,13 @@ export class AcpClient {
 				response,
 			);
 			this.currentSessionId = result.sessionId;
+			resolveNS(result);
+			this.newSessionInFlight = null;
 			return result;
 		} catch (error) {
 			this.logger.error("[AcpClient] New Session Error:", error);
+			rejectNS(error);
+			this.newSessionInFlight = null;
 			throw error;
 		}
 	}

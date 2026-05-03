@@ -523,8 +523,15 @@ export default class AgentClientPlugin extends Plugin {
 			);
 
 			const client = new AcpClient(this);
-			await client.prewarm(config, cwd);
+			// Publish the warm client IMMEDIATELY — before prewarm completes —
+			// so any chat view that mounts mid-flight can adopt it and have
+			// its initialize/newSession calls JOIN the in-flight ones via
+			// the AcpClient coalescing logic. This is what makes
+			// layout-restored views (which mount during boot, before warm-up
+			// has finished) actually benefit from the warm-up instead of
+			// cold-spawning in parallel.
 			this._warmAcpClient = client;
+			await client.prewarm(config, cwd);
 			const elapsed = (
 				(performance.now() - __startedAt) /
 				1000
