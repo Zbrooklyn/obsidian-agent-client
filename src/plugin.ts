@@ -822,11 +822,21 @@ export default class AgentClientPlugin extends Plugin {
 		};
 
 		if (targetLeaf) {
-			await targetLeaf.setViewState({
-				type: VIEW_TYPE_CHAT,
-				active: true,
-				state,
-			});
+			// Existing leaf: setViewState alone does NOT re-mount React.
+			// Imperatively poke the running ChatView so its ChatPanel
+			// re-runs the restore flow against the new sessionId.
+			const view = targetLeaf.view as ChatView | undefined;
+			if (view && typeof view.requestRestore === "function") {
+				view.requestRestore(sessionId, cwd);
+			} else {
+				// Fallback: some leaves may not be ChatView (rare). Update
+				// state and reveal so a subsequent mount picks it up.
+				await targetLeaf.setViewState({
+					type: VIEW_TYPE_CHAT,
+					active: true,
+					state,
+				});
+			}
 			await workspace.revealLeaf(targetLeaf);
 			return;
 		}

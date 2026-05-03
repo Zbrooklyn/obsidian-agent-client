@@ -39,6 +39,18 @@ function ChatComponent({
 	const [restoredAgentId, setRestoredAgentId] = useState<string | undefined>(
 		view.getInitialAgentId() ?? undefined,
 	);
+	// Latest restore request from the Conversations panel. Updated
+	// whenever ChatView.requestRestore() fires (imperative path used
+	// because Obsidian's setViewState doesn't trigger React remount).
+	const [pendingRestore, setPendingRestore] = useState<
+		{ sessionId: string; cwd: string } | null
+	>(view.pendingRestoreSession);
+	useEffect(() => {
+		const unsubscribe = view.onRestoreRequested((sessionId, cwd) => {
+			setPendingRestore({ sessionId, cwd });
+		});
+		return unsubscribe;
+	}, [view]);
 
 	// ============================================================
 	// Context Value
@@ -75,10 +87,11 @@ function ChatComponent({
 				initialAgentId={restoredAgentId}
 				forceFresh={view.forceFresh}
 				onForceFreshConsumed={() => view.consumeForceFresh()}
-				pendingRestoreSession={view.pendingRestoreSession}
-				onPendingRestoreConsumed={() =>
-					view.consumePendingRestore()
-				}
+				pendingRestoreSession={pendingRestore}
+				onPendingRestoreConsumed={() => {
+					view.consumePendingRestore();
+					setPendingRestore(null);
+				}}
 				viewHost={view}
 				onRegisterCallbacks={(callbacks) =>
 					view.setCallbacks(callbacks)
@@ -138,6 +151,25 @@ export class ChatView extends ItemView implements IChatViewContainer {
 	}
 	consumePendingRestore(): void {
 		this.pendingRestore = null;
+	}
+
+	/**
+	 * Imperative restore request from the Conversations panel. Fires
+	 * registered callbacks so the running ChatPanel re-runs its restore
+	 * flow without needing a remount.
+	 */
+	private restoreRequestCallbacks: Set<
+		(sessionId: string, cwd: string) => void
+	> = new Set();
+	requestRestore(sessionId: string, cwd: string): void {
+		this.pendingRestore = { sessionId, cwd };
+		this.restoreRequestCallbacks.forEach((cb) => cb(sessionId, cwd));
+	}
+	onRestoreRequested(
+		cb: (sessionId: string, cwd: string) => void,
+	): () => void {
+		this.restoreRequestCallbacks.add(cb);
+		return () => this.restoreRequestCallbacks.delete(cb);
 	}
 
 	/** Mark forceFresh as consumed (called by ChatPanel after first effect run) */

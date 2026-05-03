@@ -624,12 +624,14 @@ export function ChatPanel({
 		warmupLog(
 			`[WARMUP] ${new Date().toISOString()} ChatPanel mount useEffect — shouldTryResume=${shouldTryResume} candidateId=${candidate?.sessionId} candidateAgent=${candidate?.agentId} targetAgent=${targetAgentId}`,
 		);
-		if (shouldTryResume) {
+		if (shouldTryResume && candidate) {
+			const restoreSessionId: string = candidate.sessionId;
+			const restoreCwd: string = candidate.cwd;
 			logger.log(
-				`[Debug] Auto-resume: attempting restore of ${candidate.sessionId}`,
+				`[Debug] Auto-resume: attempting restore of ${restoreSessionId}`,
 			);
 			warmupLog(
-				`[WARMUP] ${new Date().toISOString()} AUTO-RESUME attempt for session=${candidate.sessionId}`,
+				`[WARMUP] ${new Date().toISOString()} AUTO-RESUME attempt for session=${restoreSessionId}`,
 			);
 			void (async () => {
 				const trace = (msg: string) =>
@@ -638,8 +640,8 @@ export function ChatPanel({
 					);
 				try {
 					await sessionHistory.restoreSession(
-						candidate.sessionId,
-						candidate.cwd,
+						restoreSessionId,
+						restoreCwd,
 					);
 					void trace(`AUTO-RESUME first attempt SUCCESS`);
 				} catch (err) {
@@ -658,8 +660,8 @@ export function ChatPanel({
 						await agent.createSession(targetAgentId);
 						void trace(`AUTO-RESUME retry: createSession done, retrying restore`);
 						await sessionHistory.restoreSession(
-							candidate.sessionId,
-							candidate.cwd,
+							restoreSessionId,
+							restoreCwd,
 						);
 						void trace(`AUTO-RESUME retry SUCCESS`);
 					} catch (err2) {
@@ -678,7 +680,15 @@ export function ChatPanel({
 		// want to re-run this effect on every settings change (only on mount
 		// and agent change). Linting around this is configured globally.
 		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [agent.createSession, config?.agent, initialAgentId]);
+		// pendingRestoreSession added so a click in Conversations panel
+		// re-runs this effect against the new target session.
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [
+		agent.createSession,
+		config?.agent,
+		initialAgentId,
+		pendingRestoreSession?.sessionId,
+	]);
 
 	// Persist the active session as the last-active for auto-resume on
 	// next launch. Skips writes when the same triple is already stored.

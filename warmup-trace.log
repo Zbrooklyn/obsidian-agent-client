@@ -1,25 +1,37 @@
-=== trace start 2026-05-03T07:05:02.749Z ===
-[WARMUP] 2026-05-03T07:05:02.752Z plugin.onload START
-[WARMUP] 2026-05-03T07:05:02.785Z plugin.onload END (eagerWarmUp=true)
-[WARMUP] 2026-05-03T07:05:02.789Z warmUpDefaultAgent START
-[WARMUP] 2026-05-03T07:05:02.793Z AcpClient.initialize CALLED (agent=claude-code-acp, hasPending=false, isInitialized=false)
-[WARMUP] 2026-05-03T07:05:02.795Z initialize CACHE MISS — running real init
-[WARMUP] 2026-05-03T07:05:03.711Z ADOPTED prewarmed AcpClient for view 50829ee5a8896923
-[WARMUP] 2026-05-03T07:05:03.868Z warmUpDefaultAgent SKIPPED (inFlight=true, hasWarm=false)
-[WARMUP] 2026-05-03T07:05:03.889Z ChatPanel mount useEffect — shouldTryResume=true candidateId=49f9ecbc-7eec-4089-ac23-f8ce371008e0 candidateAgent=claude-code-acp targetAgent=claude-code-acp
-[WARMUP] 2026-05-03T07:05:03.891Z AUTO-RESUME attempt for session=49f9ecbc-7eec-4089-ac23-f8ce371008e0
-[WARMUP] 2026-05-03T07:05:03.977Z AUTO-RESUME first attempt FAILED: Error: Session restoration is not supported
-[WARMUP] 2026-05-03T07:05:03.980Z AcpClient.initialize CALLED (agent=claude-code-acp, hasPending=false, isInitialized=false)
-[WARMUP] 2026-05-03T07:05:03.982Z initialize JOIN IN-FLIGHT — awaiting existing call
-[WARMUP] 2026-05-03T07:05:05.176Z AcpClient.newSession CALLED (cwd=C:\Users\Owner\Documents\agent-client-dev-vault, hasPending=false, pendingCwd=null)
-[WARMUP] 2026-05-03T07:05:05.178Z newSession CACHE MISS — running real newSession
-[WARMUP] 2026-05-03T07:05:05.181Z AcpClient.newSession CALLED (cwd=C:\Users\Owner\Documents\agent-client-dev-vault, hasPending=false, pendingCwd=null)
-[WARMUP] 2026-05-03T07:05:05.183Z newSession JOIN IN-FLIGHT — awaiting existing prewarm
-[WARMUP] 2026-05-03T07:05:14.626Z warmUpDefaultAgent COMPLETE (11.84s) — agent=claude-code-acp
-[WARMUP] 2026-05-03T07:05:14.629Z warm client was consumed during warm-up — scheduling refill
-[WARMUP] 2026-05-03T07:05:14.631Z AUTO-RESUME retry: createSession done, retrying restore
-[WARMUP] 2026-05-03T07:05:14.655Z warmUpDefaultAgent START
-[WARMUP] 2026-05-03T07:05:14.658Z AcpClient.initialize CALLED (agent=claude-code-acp, hasPending=false, isInitialized=false)
-[WARMUP] 2026-05-03T07:05:14.661Z initialize CACHE MISS — running real init
-[WARMUP] 2026-05-03T07:05:16.373Z AcpClient.newSession CALLED (cwd=C:\Users\Owner\Documents\agent-client-dev-vault, hasPending=false, pendingCwd=null)
-[WARMUP] 2026-05-03T07:05:16.375Z newSession CACHE MISS — running real newSession
+=== trace start 2026-05-03T14:57:21.718Z ===
+[WARMUP] 2026-05-03T14:57:21.721Z plugin.onload START
+[WARMUP] 2026-05-03T14:57:21.818Z plugin.onload END (eagerWarmUp=true)
+[WARMUP] 2026-05-03T14:57:21.820Z warmUpDefaultAgent START
+[WARMUP] 2026-05-03T14:57:21.823Z AcpClient.initialize CALLED (agent=claude-code-acp, hasPending=false, isInitialized=false)
+[WARMUP] 2026-05-03T14:57:21.824Z initialize CACHE MISS — running real init
+[WARMUP] 2026-05-03T14:57:22.080Z ADOPTED prewarmed AcpClient for view 50829ee5a8896923
+[WARMUP] 2026-05-03T14:57:22.135Z warmUpDefaultAgent SKIPPED (inFlight=true, hasWarm=false)
+[WARMUP] 2026-05-03T14:57:22.186Z ChatPanel mount useEffect — shouldTryResume=true candidateId=49f9ecbc-7eec-4089-ac23-f8ce371008e0 candidateAgent=claude-code-acp targetAgent=claude-code-acp
+[WARMUP] 2026-05-03T14:57:22.187Z AUTO-RESUME attempt for session=49f9ecbc-7eec-4089-ac23-f8ce371008e0
+[WARMUP] 2026-05-03T14:57:22.204Z AUTO-RESUME first attempt FAILED: Error: Session restoration is not supported
+[WARMUP] 2026-05-03T14:57:22.205Z AcpClient.initialize CALLED (agent=claude-code-acp, hasPending=false, isInitialized=false)
+[WARMUP] 2026-05-03T14:57:22.206Z initialize JOIN IN-FLIGHT — awaiting existing call
+[WARMUP] 2026-05-03T14:57:22.413Z AcpClient.newSession CALLED (cwd=C:\Users\Owner\Documents\agent-client-dev-vault, hasPending=false, pendingCwd=null)
+[WARMUP] 2026-05-03T14:57:22.414Z newSession CACHE MISS — running real newSession
+[WARMUP] 2026-05-03T14:57:22.415Z AcpClient.newSession CALLED (cwd=C:\Users\Owner\Documents\agent-client-dev-vault, hasPending=false, pendingCwd=null)
+[WARMUP] 2026-05-03T14:57:22.415Z newSession JOIN IN-FLIGHT — awaiting existing prewarm
+[WARMUP] 2026-05-03T14:57:28.984Z warmUpDefaultAgent COMPLETE (7.16s) — agent=claude-code-acp
+[WARMUP] 2026-05-03T14:57:28.985Z warm client was consumed during warm-up — scheduling refill
+[WARMUP] 2026-05-03T14:57:28.986Z AUTO-RESUME retry: createSession done, retrying restore
+[WARMUP] 2026-05-03T14:57:28.990Z warmUpDefaultAgent START
+[WARMUP] 2026-05-03T14:57:28.992Z AcpClient.initialize CALLED (agent=claude-code-acp, hasPending=false, isInitialized=false)
+[WARMUP] 2026-05-03T14:57:28.993Z initialize CACHE MISS — running real init
+[WARMUP] 2026-05-03T14:57:29.674Z AcpClient.newSession CALLED (cwd=C:\Users\Owner\Documents\agent-client-dev-vault, hasPending=false, pendingCwd=null)
+[WARMUP] 2026-05-03T14:57:29.675Z newSession CACHE MISS — running real newSession
+[WARMUP] 2026-05-03T14:57:37.133Z warmUpDefaultAgent COMPLETE (8.14s) — agent=claude-code-acp
+[WARMUP] 2026-05-03T14:57:39.674Z ChatPanel mount useEffect — shouldTryResume=[object Object] candidateId=9ee672dc-c2de-4cc2-8130-d6879f1bbca1 candidateAgent=claude-code-acp targetAgent=claude-code-acp
+[WARMUP] 2026-05-03T14:57:39.676Z AUTO-RESUME attempt for session=9ee672dc-c2de-4cc2-8130-d6879f1bbca1
+[WARMUP] 2026-05-03T14:57:39.682Z ChatPanel mount useEffect — shouldTryResume=true candidateId=49f9ecbc-7eec-4089-ac23-f8ce371008e0 candidateAgent=claude-code-acp targetAgent=claude-code-acp
+[WARMUP] 2026-05-03T14:57:39.683Z AUTO-RESUME attempt for session=49f9ecbc-7eec-4089-ac23-f8ce371008e0
+[WARMUP] 2026-05-03T14:57:46.246Z AUTO-RESUME retry FAILED: [object Object]
+[WARMUP] 2026-05-03T14:58:06.021Z AUTO-RESUME first attempt FAILED: [object Object]
+[WARMUP] 2026-05-03T14:58:06.023Z AcpClient.newSession CALLED (cwd=C:\Users\Owner\Documents\agent-client-dev-vault, hasPending=true, pendingCwd=C:\Users\Owner\Documents\agent-client-dev-vault)
+[WARMUP] 2026-05-03T14:58:06.024Z newSession CACHE HIT — instant adoption (2ms)
+[WARMUP] 2026-05-03T14:58:06.026Z AUTO-RESUME retry: createSession done, retrying restore
+[WARMUP] 2026-05-03T14:58:19.853Z AUTO-RESUME first attempt SUCCESS
+[WARMUP] 2026-05-03T14:58:25.583Z AUTO-RESUME retry FAILED: [object Object]
