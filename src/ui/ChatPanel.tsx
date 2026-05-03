@@ -589,13 +589,38 @@ export function ChatPanel({
 	// ============================================================
 	// Effects - Session Lifecycle
 	// ============================================================
-	// Initialize session on mount. If auto-resume is on and a recent
-	// session matches the agent we're about to start, try to restore it
-	// first. Fall back to a fresh session on any restore error.
+	// Track whether the mount-time auto-resume decision has already been
+	// made for this ChatPanel instance, plus the most recent pendingRestore
+	// sessionId we've actually processed. Prevents a race where consuming
+	// pendingRestoreSession (setting it to null in parent state) caused the
+	// effect to re-run and fall back to lastActiveSession — clobbering the
+	// real restore with the most-recent-active session.
+	const initialResumeAttemptedRef = useRef(false);
+	const lastProcessedPendingRestoreIdRef = useRef<string | null>(null);
+
 	useEffect(() => {
 		const targetAgentId =
 			config?.agent || initialAgentId || plugin.settings.defaultAgentId;
 		const settings = plugin.settings;
+
+		const incomingPendingId = pendingRestoreSession?.sessionId ?? null;
+		const isInitialMount = !initialResumeAttemptedRef.current;
+		const isNewPendingRestore =
+			incomingPendingId !== null &&
+			incomingPendingId !== lastProcessedPendingRestoreIdRef.current;
+
+		// Skip re-runs caused by parent setting pendingRestoreSession back
+		// to null after we consumed it. Without this guard, the effect
+		// would fall back to lastActiveSession and clobber the real restore.
+		if (!isInitialMount && !isNewPendingRestore) {
+			return;
+		}
+
+		initialResumeAttemptedRef.current = true;
+		if (incomingPendingId) {
+			lastProcessedPendingRestoreIdRef.current = incomingPendingId;
+		}
+
 		// pendingRestoreSession (from Conversations panel click) overrides
 		// lastActiveSession. forceFresh skips both.
 		const candidate = forceFresh
