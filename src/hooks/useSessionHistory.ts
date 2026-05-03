@@ -525,9 +525,13 @@ export function useSessionHistory(
 						await settingsAccess.loadSessionMessages(sessionId);
 
 					if (localMessages && onMessagesRestore) {
-						// Local messages available: ignore agent replay, restore from local
+						// Cached-render path: paint messages from local disk
+						// IMMEDIATELY (no wait for agent), then connect agent in
+						// the background. Send-button is gated on session ready
+						// state elsewhere, so the user can read while we load.
 						onIgnoreUpdates?.(true);
 						onClearMessages?.();
+						onMessagesRestore(localMessages);
 						try {
 							const result = await agentClient.loadSession(
 								sessionId,
@@ -539,7 +543,6 @@ export function useSessionHistory(
 								result.models,
 								result.configOptions,
 							);
-							onMessagesRestore(localMessages);
 						} finally {
 							onIgnoreUpdates?.(false);
 						}
