@@ -382,24 +382,22 @@ export default class AgentClientPlugin extends Plugin {
 			}),
 		);
 
-		// Eager warm-up: pre-spawn the default agent in the background after
-		// Obsidian has settled. The first chat view to open adopts this warm
-		// client and skips the ~8s spawn+handshake user-perceived wait.
+		// Eager warm-up: pre-spawn the default agent in the background.
+		//
+		// CRITICAL: this must run BEFORE workspace restoration fires
+		// onOpen on layout-restored chat views. We tried gating this on
+		// onLayoutReady + 1500ms — that fires AFTER the views have already
+		// cold-mounted and the optimization is wasted.
+		//
+		// Running here, the synchronous prefix of warmUpDefaultAgent
+		// (instantiating AcpClient + publishing _warmAcpClient) executes
+		// before any view onOpen, so layout-restored views adopt the warm
+		// client and join its in-flight init+newSession via coalescing.
 		console.log(
 			`[WARMUP] ${new Date().toISOString()} plugin.onload END (eagerWarmUp=${this.settings.eagerWarmUp})`,
 		);
 		if (this.settings.eagerWarmUp) {
-			this.app.workspace.onLayoutReady(() => {
-				console.log(
-					`[WARMUP] ${new Date().toISOString()} layout ready, scheduling warm-up in 1500ms`,
-				);
-				// Defer further so we don't compete with other plugins'
-				// post-layout init work. 1.5s is enough to clear most boot
-				// contention without making the warm-up feel slow to land.
-				window.setTimeout(() => {
-					void this.warmUpDefaultAgent();
-				}, 1500);
-			});
+			void this.warmUpDefaultAgent();
 		}
 	}
 
