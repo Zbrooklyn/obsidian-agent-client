@@ -7,7 +7,7 @@
  * filters by title. New-chat button at the top opens a fresh chat tab.
  */
 
-import { ItemView, WorkspaceLeaf, setIcon, Notice } from "obsidian";
+import { ItemView, WorkspaceLeaf, setIcon, Notice, Menu } from "obsidian";
 import * as React from "react";
 const { useState, useEffect, useMemo, useRef, useCallback } = React;
 import { createRoot, Root } from "react-dom/client";
@@ -256,30 +256,77 @@ function ConversationListItem({
 	onDelete: () => void;
 }) {
 	const pinIconRef = useRef<HTMLSpanElement>(null);
-	const editIconRef = useRef<HTMLSpanElement>(null);
-	const restoreIconRef = useRef<HTMLSpanElement>(null);
-	const forkIconRef = useRef<HTMLSpanElement>(null);
-	const deleteIconRef = useRef<HTMLSpanElement>(null);
+	const moreIconRef = useRef<HTMLSpanElement>(null);
 
 	useEffect(() => {
 		if (pinIconRef.current)
 			setIcon(pinIconRef.current, isPinned ? "pin-off" : "pin");
 	}, [isPinned]);
 	useEffect(() => {
-		if (editIconRef.current) setIcon(editIconRef.current, "pencil");
-		if (restoreIconRef.current) setIcon(restoreIconRef.current, "play");
-		if (forkIconRef.current) setIcon(forkIconRef.current, "git-branch");
-		if (deleteIconRef.current) setIcon(deleteIconRef.current, "trash-2");
+		if (moreIconRef.current)
+			setIcon(moreIconRef.current, "more-vertical");
 	}, []);
 
 	const lastUpdated = session.updatedAt
 		? formatRelativeTime(new Date(Date.parse(session.updatedAt)))
 		: "";
 
-	const stop = (fn: () => void) => (e: React.MouseEvent) => {
-		e.stopPropagation();
-		fn();
-	};
+	const handleShowOverflow = useCallback(
+		(e: React.MouseEvent) => {
+			e.stopPropagation();
+			e.preventDefault();
+			const menu = new Menu();
+			menu.addItem((item) =>
+				item
+					.setTitle(isPinned ? "Unpin" : "Pin")
+					.setIcon(isPinned ? "pin-off" : "pin")
+					.onClick(() => onTogglePin()),
+			);
+			menu.addItem((item) =>
+				item
+					.setTitle("Rename")
+					.setIcon("pencil")
+					.onClick(() => onEditTitle()),
+			);
+			menu.addItem((item) =>
+				item
+					.setTitle("Restore in active chat")
+					.setIcon("play")
+					.onClick(() => onRestore()),
+			);
+			menu.addItem((item) =>
+				item
+					.setTitle("Fork (open in new chat)")
+					.setIcon("git-branch")
+					.onClick(() => onFork()),
+			);
+			menu.addSeparator();
+			menu.addItem((item) =>
+				item
+					.setTitle("Delete")
+					.setIcon("trash-2")
+					.setWarning(true)
+					.onClick(() => onDelete()),
+			);
+			menu.showAtMouseEvent(e.nativeEvent);
+		},
+		[
+			isPinned,
+			onTogglePin,
+			onEditTitle,
+			onRestore,
+			onFork,
+			onDelete,
+		],
+	);
+
+	const handleTogglePinClick = useCallback(
+		(e: React.MouseEvent) => {
+			e.stopPropagation();
+			onTogglePin();
+		},
+		[onTogglePin],
+	);
 
 	return (
 		<div
@@ -290,14 +337,6 @@ function ConversationListItem({
 		>
 			<div className="agent-client-conversation-list-item-content">
 				<div className="agent-client-conversation-list-item-title">
-					{isPinned && (
-						<span
-							className="agent-client-conversation-list-item-pin-marker"
-							aria-hidden="true"
-						>
-							📌
-						</span>
-					)}
 					<span>{session.title ?? "Untitled"}</span>
 				</div>
 				{lastUpdated && (
@@ -307,47 +346,25 @@ function ConversationListItem({
 				)}
 			</div>
 			<div className="agent-client-conversation-list-item-actions">
+				{/* Pin stays inline when pinned (most common quick action).
+				    Otherwise hidden — accessible via the overflow menu. */}
+				{isPinned && (
+					<button
+						type="button"
+						className="agent-client-conversation-list-item-action agent-client-conversation-list-item-action-pin-active"
+						onClick={handleTogglePinClick}
+						title="Unpin conversation"
+					>
+						<span ref={pinIconRef} aria-hidden="true" />
+					</button>
+				)}
 				<button
 					type="button"
-					className="agent-client-conversation-list-item-action"
-					onClick={stop(onTogglePin)}
-					title={
-						isPinned ? "Unpin conversation" : "Pin conversation"
-					}
+					className="agent-client-conversation-list-item-action agent-client-conversation-list-item-action-overflow"
+					onClick={handleShowOverflow}
+					title="More actions"
 				>
-					<span ref={pinIconRef} aria-hidden="true" />
-				</button>
-				<button
-					type="button"
-					className="agent-client-conversation-list-item-action"
-					onClick={stop(onEditTitle)}
-					title="Rename conversation"
-				>
-					<span ref={editIconRef} aria-hidden="true" />
-				</button>
-				<button
-					type="button"
-					className="agent-client-conversation-list-item-action agent-client-conversation-list-item-action-restore"
-					onClick={stop(onRestore)}
-					title="Restore in active chat"
-				>
-					<span ref={restoreIconRef} aria-hidden="true" />
-				</button>
-				<button
-					type="button"
-					className="agent-client-conversation-list-item-action agent-client-conversation-list-item-action-fork"
-					onClick={stop(onFork)}
-					title="Fork (open in new chat)"
-				>
-					<span ref={forkIconRef} aria-hidden="true" />
-				</button>
-				<button
-					type="button"
-					className="agent-client-conversation-list-item-action agent-client-conversation-list-item-action-delete"
-					onClick={stop(onDelete)}
-					title="Delete conversation"
-				>
-					<span ref={deleteIconRef} aria-hidden="true" />
+					<span ref={moreIconRef} aria-hidden="true" />
 				</button>
 			</div>
 		</div>
