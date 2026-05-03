@@ -1,0 +1,25 @@
+=== trace start 2026-05-03T07:05:02.749Z ===
+[WARMUP] 2026-05-03T07:05:02.752Z plugin.onload START
+[WARMUP] 2026-05-03T07:05:02.785Z plugin.onload END (eagerWarmUp=true)
+[WARMUP] 2026-05-03T07:05:02.789Z warmUpDefaultAgent START
+[WARMUP] 2026-05-03T07:05:02.793Z AcpClient.initialize CALLED (agent=claude-code-acp, hasPending=false, isInitialized=false)
+[WARMUP] 2026-05-03T07:05:02.795Z initialize CACHE MISS — running real init
+[WARMUP] 2026-05-03T07:05:03.711Z ADOPTED prewarmed AcpClient for view 50829ee5a8896923
+[WARMUP] 2026-05-03T07:05:03.868Z warmUpDefaultAgent SKIPPED (inFlight=true, hasWarm=false)
+[WARMUP] 2026-05-03T07:05:03.889Z ChatPanel mount useEffect — shouldTryResume=true candidateId=49f9ecbc-7eec-4089-ac23-f8ce371008e0 candidateAgent=claude-code-acp targetAgent=claude-code-acp
+[WARMUP] 2026-05-03T07:05:03.891Z AUTO-RESUME attempt for session=49f9ecbc-7eec-4089-ac23-f8ce371008e0
+[WARMUP] 2026-05-03T07:05:03.977Z AUTO-RESUME first attempt FAILED: Error: Session restoration is not supported
+[WARMUP] 2026-05-03T07:05:03.980Z AcpClient.initialize CALLED (agent=claude-code-acp, hasPending=false, isInitialized=false)
+[WARMUP] 2026-05-03T07:05:03.982Z initialize JOIN IN-FLIGHT — awaiting existing call
+[WARMUP] 2026-05-03T07:05:05.176Z AcpClient.newSession CALLED (cwd=C:\Users\Owner\Documents\agent-client-dev-vault, hasPending=false, pendingCwd=null)
+[WARMUP] 2026-05-03T07:05:05.178Z newSession CACHE MISS — running real newSession
+[WARMUP] 2026-05-03T07:05:05.181Z AcpClient.newSession CALLED (cwd=C:\Users\Owner\Documents\agent-client-dev-vault, hasPending=false, pendingCwd=null)
+[WARMUP] 2026-05-03T07:05:05.183Z newSession JOIN IN-FLIGHT — awaiting existing prewarm
+[WARMUP] 2026-05-03T07:05:14.626Z warmUpDefaultAgent COMPLETE (11.84s) — agent=claude-code-acp
+[WARMUP] 2026-05-03T07:05:14.629Z warm client was consumed during warm-up — scheduling refill
+[WARMUP] 2026-05-03T07:05:14.631Z AUTO-RESUME retry: createSession done, retrying restore
+[WARMUP] 2026-05-03T07:05:14.655Z warmUpDefaultAgent START
+[WARMUP] 2026-05-03T07:05:14.658Z AcpClient.initialize CALLED (agent=claude-code-acp, hasPending=false, isInitialized=false)
+[WARMUP] 2026-05-03T07:05:14.661Z initialize CACHE MISS — running real init
+[WARMUP] 2026-05-03T07:05:16.373Z AcpClient.newSession CALLED (cwd=C:\Users\Owner\Documents\agent-client-dev-vault, hasPending=false, pendingCwd=null)
+[WARMUP] 2026-05-03T07:05:16.375Z newSession CACHE MISS — running real newSession

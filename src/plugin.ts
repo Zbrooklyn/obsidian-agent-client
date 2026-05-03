@@ -9,6 +9,10 @@ import {
 import * as semver from "semver";
 import { ChatView, VIEW_TYPE_CHAT } from "./ui/ChatView";
 import {
+	ConversationListView,
+	VIEW_TYPE_CONVERSATION_LIST,
+} from "./ui/ConversationListView";
+import {
 	createFloatingChat,
 	FloatingViewContainer,
 } from "./ui/FloatingChatView";
@@ -262,6 +266,10 @@ export default class AgentClientPlugin extends Plugin {
 		this.settingsService = createSettingsService(this.settings, this);
 
 		this.registerView(VIEW_TYPE_CHAT, (leaf) => new ChatView(leaf, this));
+		this.registerView(
+			VIEW_TYPE_CONVERSATION_LIST,
+			(leaf) => new ConversationListView(leaf, this),
+		);
 
 		const ribbonIconEl = this.addRibbonIcon(
 			"bot-message-square",
@@ -272,11 +280,30 @@ export default class AgentClientPlugin extends Plugin {
 		);
 		ribbonIconEl.addClass("agent-client-ribbon-icon");
 
+		const conversationsRibbonEl = this.addRibbonIcon(
+			"messages-square",
+			"Open conversations panel",
+			(_evt: MouseEvent) => {
+				void this.activateConversationListView();
+			},
+		);
+		conversationsRibbonEl.addClass(
+			"agent-client-conversations-ribbon-icon",
+		);
+
 		this.addCommand({
 			id: "open-chat-view",
 			name: "Open chat view",
 			callback: () => {
 				void this.activateView();
+			},
+		});
+
+		this.addCommand({
+			id: "open-conversations-panel",
+			name: "Open conversations panel",
+			callback: () => {
+				void this.activateConversationListView();
 			},
 		});
 
@@ -744,6 +771,78 @@ export default class AgentClientPlugin extends Plugin {
 		return side === "right"
 			? workspace.getRightLeaf(false)
 			: workspace.getLeftLeaf(false);
+	}
+
+	/**
+	 * Activate the persistent Conversations panel — used by the ribbon icon
+	 * and command palette. Creates the leaf if it doesn't exist, otherwise
+	 * reveals the existing one.
+	 */
+	async activateConversationListView(): Promise<void> {
+		const { workspace } = this.app;
+		const existing = workspace.getLeavesOfType(
+			VIEW_TYPE_CONVERSATION_LIST,
+		);
+		if (existing.length > 0) {
+			await workspace.revealLeaf(existing[0]);
+			return;
+		}
+		const leaf = workspace.getLeftLeaf(false);
+		if (!leaf) {
+			new Notice("[Agent Client] Could not open conversations panel");
+			return;
+		}
+		await leaf.setViewState({
+			type: VIEW_TYPE_CONVERSATION_LIST,
+			active: true,
+		});
+		await workspace.revealLeaf(leaf);
+	}
+
+	/**
+	 * Restore a saved session in the currently focused chat view, or open
+	 * a new chat tab if none exists. Used by ConversationListView click
+	 * handler to make the side panel feel like Slack/Discord channel
+	 * switching.
+	 */
+	async restoreSessionInActiveOrNewChatView(
+		sessionId: string,
+		cwd: string,
+		agentId: string,
+	): Promise<void> {
+		const { workspace } = this.app;
+		// Prefer the most-recently-active chat leaf if any are open.
+		const chatLeaves = workspace.getLeavesOfType(VIEW_TYPE_CHAT);
+		const targetLeaf = chatLeaves[0];
+
+		const state = {
+			initialAgentId: agentId,
+			restoreSessionId: sessionId,
+			restoreSessionCwd: cwd,
+		};
+
+		if (targetLeaf) {
+			await targetLeaf.setViewState({
+				type: VIEW_TYPE_CHAT,
+				active: true,
+				state,
+			});
+			await workspace.revealLeaf(targetLeaf);
+			return;
+		}
+
+		// No existing chat leaf — open a new tab and direct it to restore.
+		const newLeaf = this.createNewChatLeaf(true);
+		if (!newLeaf) {
+			new Notice("[Agent Client] Could not open chat view");
+			return;
+		}
+		await newLeaf.setViewState({
+			type: VIEW_TYPE_CHAT,
+			active: true,
+			state,
+		});
+		await workspace.revealLeaf(newLeaf);
 	}
 
 	/**

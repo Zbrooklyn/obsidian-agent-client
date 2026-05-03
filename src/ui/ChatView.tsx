@@ -75,6 +75,10 @@ function ChatComponent({
 				initialAgentId={restoredAgentId}
 				forceFresh={view.forceFresh}
 				onForceFreshConsumed={() => view.consumeForceFresh()}
+				pendingRestoreSession={view.pendingRestoreSession}
+				onPendingRestoreConsumed={() =>
+					view.consumePendingRestore()
+				}
 				viewHost={view}
 				onRegisterCallbacks={(callbacks) =>
 					view.setCallbacks(callbacks)
@@ -96,6 +100,13 @@ interface ChatViewState extends Record<string, unknown> {
 	 * leaf re-resume that session normally.
 	 */
 	forceFresh?: boolean;
+	/**
+	 * When set, ChatPanel should restore THIS specific session instead of
+	 * auto-resuming the most-recent lastActiveSession. Single-use: cleared
+	 * after the first mount consumes it.
+	 */
+	restoreSessionId?: string;
+	restoreSessionCwd?: string;
 }
 
 export class ChatView extends ItemView implements IChatViewContainer {
@@ -117,6 +128,18 @@ export class ChatView extends ItemView implements IChatViewContainer {
 	get forceFresh(): boolean {
 		return this.forceFreshOnMount;
 	}
+	/**
+	 * Override-target for next ChatPanel mount: restore THIS session, not
+	 * the persisted lastActiveSession. Single-use; cleared on consumption.
+	 */
+	private pendingRestore: { sessionId: string; cwd: string } | null = null;
+	get pendingRestoreSession(): { sessionId: string; cwd: string } | null {
+		return this.pendingRestore;
+	}
+	consumePendingRestore(): void {
+		this.pendingRestore = null;
+	}
+
 	/** Mark forceFresh as consumed (called by ChatPanel after first effect run) */
 	consumeForceFresh(): void {
 		this.forceFreshOnMount = false;
@@ -179,6 +202,12 @@ export class ChatView extends ItemView implements IChatViewContainer {
 		const previousAgentId = this.initialAgentId;
 		this.initialAgentId = state.initialAgentId ?? null;
 		if (state.forceFresh === true) this.forceFreshOnMount = true;
+		if (state.restoreSessionId && state.restoreSessionCwd) {
+			this.pendingRestore = {
+				sessionId: state.restoreSessionId,
+				cwd: state.restoreSessionCwd,
+			};
+		}
 		await super.setState(state, result);
 
 		// Notify React when agentId is restored and differs from previous value

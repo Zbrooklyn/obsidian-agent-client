@@ -102,6 +102,11 @@ export interface ChatPanelProps {
 	/** Called once after the mount-time auto-resume decision has been made,
 	 * so the view can clear its forceFresh flag (consumed = single-use). */
 	onForceFreshConsumed?: () => void;
+	/** When set, ChatPanel restores THIS specific session instead of the
+	 *  lastActiveSession. Used by ConversationListView click handler.
+	 *  Single-use; consumed via onPendingRestoreConsumed. */
+	pendingRestoreSession?: { sessionId: string; cwd: string } | null;
+	onPendingRestoreConsumed?: () => void;
 }
 
 // ============================================================================
@@ -144,6 +149,8 @@ export function ChatPanel({
 	containerEl: containerElProp,
 	forceFresh = false,
 	onForceFreshConsumed,
+	pendingRestoreSession = null,
+	onPendingRestoreConsumed,
 }: ChatPanelProps) {
 	// ============================================================
 	// Platform Check
@@ -589,20 +596,29 @@ export function ChatPanel({
 		const targetAgentId =
 			config?.agent || initialAgentId || plugin.settings.defaultAgentId;
 		const settings = plugin.settings;
-		const candidate = settings.lastActiveSession;
-		// forceFresh wins: user explicitly opened a new tab and wants a
-		// brand-new chat, not the last-active one.
+		// pendingRestoreSession (from Conversations panel click) overrides
+		// lastActiveSession. forceFresh skips both.
+		const candidate = forceFresh
+			? null
+			: pendingRestoreSession
+				? {
+						sessionId: pendingRestoreSession.sessionId,
+						cwd: pendingRestoreSession.cwd,
+						agentId: targetAgentId,
+					}
+				: settings.lastActiveSession;
 		const shouldTryResume =
 			!forceFresh &&
-			settings.autoResumeLastSession &&
-			candidate &&
-			candidate.agentId === targetAgentId;
-		// Consume the flag immediately — it's a one-time instruction. If the
-		// view re-mounts later (e.g. after Obsidian reload), forceFresh will
-		// be false and normal auto-resume can kick in for the now-running
-		// session.
+			(pendingRestoreSession ||
+				(settings.autoResumeLastSession &&
+					candidate &&
+					candidate.agentId === targetAgentId));
+		// Consume the one-time flags immediately so reloads don't re-fire them.
 		if (forceFresh && onForceFreshConsumed) {
 			onForceFreshConsumed();
+		}
+		if (pendingRestoreSession && onPendingRestoreConsumed) {
+			onPendingRestoreConsumed();
 		}
 
 		warmupLog(
