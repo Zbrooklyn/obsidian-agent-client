@@ -1859,8 +1859,16 @@ If your plugin does not need CSS, delete this file.
 	color: var(--text-faint);
 }
 
-/* Pin toggle: hidden by default, revealed on item hover */
-.agent-client-conversation-list-item-pin {
+/* Per-item action row: hidden by default, revealed on item hover.
+   Pinned items keep the pin icon visible (others stay hidden). */
+.agent-client-conversation-list-item-actions {
+	display: inline-flex;
+	align-items: center;
+	gap: 2px;
+	flex-shrink: 0;
+}
+
+.agent-client-conversation-list-item-action {
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
@@ -1876,24 +1884,45 @@ If your plugin does not need CSS, delete this file.
 	flex-shrink: 0;
 	border-radius: 4px;
 	opacity: 0;
-	transition: opacity 0.1s ease, background-color 0.1s ease, color 0.1s ease;
+	transition:
+		opacity 0.1s ease,
+		background-color 0.1s ease,
+		color 0.1s ease;
 }
 
 .agent-client-conversation-list-item:hover
-	.agent-client-conversation-list-item-pin,
-.agent-client-conversation-list-item-pinned
-	.agent-client-conversation-list-item-pin {
-	opacity: 1;
+	.agent-client-conversation-list-item-action {
+	opacity: 0.85;
 }
 
-.agent-client-conversation-list-item-pin:hover {
+.agent-client-conversation-list-item-action:hover {
+	opacity: 1 !important;
 	background: var(--background-modifier-hover) !important;
 	color: var(--text-normal);
 }
 
-.agent-client-conversation-list-item-pin svg {
+.agent-client-conversation-list-item-action svg {
 	width: 13px;
 	height: 13px;
+}
+
+/* Pinned items keep the FIRST action button (pin) always visible */
+.agent-client-conversation-list-item-pinned
+	.agent-client-conversation-list-item-action:first-child {
+	opacity: 1;
+}
+
+/* Color hints on hover for the more-charged actions */
+.agent-client-conversation-list-item-action-restore:hover {
+	color: var(--text-accent) !important;
+}
+
+.agent-client-conversation-list-item-action-fork:hover {
+	color: var(--text-accent) !important;
+}
+
+.agent-client-conversation-list-item-action-delete:hover {
+	color: var(--text-error) !important;
 }
 
 .agent-client-session-history-item {

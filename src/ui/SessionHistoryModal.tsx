@@ -21,7 +21,7 @@ import type { SessionInfo } from "../types/session";
  * Displays session title and asks user to confirm deletion.
  * Calls onConfirm callback only when user clicks Delete button.
  */
-class ConfirmDeleteModal extends Modal {
+export class ConfirmDeleteModal extends Modal {
 	private sessionTitle: string;
 	private onConfirm: () => void | Promise<void>;
 
@@ -94,7 +94,7 @@ class ConfirmDeleteModal extends Modal {
  * Displays a text input pre-filled with the current title.
  * Calls onSave callback with the new title when user clicks Save.
  */
-class EditTitleModal extends Modal {
+export class EditTitleModal extends Modal {
 	private currentTitle: string;
 	private onSave: (newTitle: string) => void | Promise<void>;
 

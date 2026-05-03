@@ -15,6 +15,7 @@ import { createRoot, Root } from "react-dom/client";
 import type AgentClientPlugin from "../plugin";
 import type { SavedSessionInfo } from "../types/session";
 import { VIEW_TYPE_CHAT } from "./ChatView";
+import { EditTitleModal, ConfirmDeleteModal } from "./SessionHistoryModal";
 
 export const VIEW_TYPE_CONVERSATION_LIST =
 	"agent-client-conversation-list-view";
@@ -102,6 +103,76 @@ function ConversationListPanel({ plugin }: { plugin: AgentClientPlugin }) {
 		[plugin],
 	);
 
+	const handleEditTitle = useCallback(
+		(session: SavedSessionInfo) => {
+			const modal = new EditTitleModal(
+				plugin.app,
+				session.title ?? "Untitled",
+				async (newTitle) => {
+					const idx = (plugin.settings.savedSessions ?? []).findIndex(
+						(s) => s.sessionId === session.sessionId,
+					);
+					if (idx >= 0) {
+						plugin.settings.savedSessions[idx] = {
+							...plugin.settings.savedSessions[idx],
+							title: newTitle,
+						};
+						await plugin.saveSettings();
+						setSessions([...plugin.settings.savedSessions]);
+					}
+				},
+			);
+			modal.open();
+		},
+		[plugin],
+	);
+
+	const handleDelete = useCallback(
+		(session: SavedSessionInfo) => {
+			const modal = new ConfirmDeleteModal(
+				plugin.app,
+				session.title ?? "Untitled",
+				async () => {
+					plugin.settings.savedSessions = (
+						plugin.settings.savedSessions ?? []
+					).filter((s) => s.sessionId !== session.sessionId);
+					// Also unpin if pinned
+					plugin.settings.pinnedSessionIds = (
+						plugin.settings.pinnedSessionIds ?? []
+					).filter((id) => id !== session.sessionId);
+					await plugin.saveSettings();
+					setSessions([...plugin.settings.savedSessions]);
+					setPinnedIds(
+						new Set(plugin.settings.pinnedSessionIds),
+					);
+					new Notice(
+						`[Agent Client] Removed "${session.title ?? "session"}" from list`,
+					);
+				},
+			);
+			modal.open();
+		},
+		[plugin],
+	);
+
+	const handleFork = useCallback(
+		(_session: SavedSessionInfo) => {
+			// Fork requires a running ACP session via the agent's
+			// session/fork RPC, which the side panel doesn't have its own
+			// connection for. Route through openNewChatViewWithAgent for now
+			// (fresh tab with same agent). True fork-from-this-session is
+			// a follow-up that requires plugin-level helper into the
+			// agent's loadSession-then-fork flow.
+			void plugin.openNewChatViewWithAgent(
+				plugin.settings.defaultAgentId,
+			);
+			new Notice(
+				"[Agent Client] Opened new chat tab (true fork TBD)",
+			);
+		},
+		[plugin],
+	);
+
 	const searchIconRef = useRef<HTMLSpanElement>(null);
 	useEffect(() => {
 		if (searchIconRef.current)
@@ -154,6 +225,10 @@ function ConversationListPanel({ plugin }: { plugin: AgentClientPlugin }) {
 						isPinned={pinnedIds.has(session.sessionId)}
 						onClick={() => void handleClickSession(session)}
 						onTogglePin={() => handleTogglePin(session.sessionId)}
+						onEditTitle={() => handleEditTitle(session)}
+						onRestore={() => void handleClickSession(session)}
+						onFork={() => handleFork(session)}
+						onDelete={() => handleDelete(session)}
 					/>
 				))}
 			</div>
@@ -166,21 +241,45 @@ function ConversationListItem({
 	isPinned,
 	onClick,
 	onTogglePin,
+	onEditTitle,
+	onRestore,
+	onFork,
+	onDelete,
 }: {
 	session: SavedSessionInfo;
 	isPinned: boolean;
 	onClick: () => void;
 	onTogglePin: () => void;
+	onEditTitle: () => void;
+	onRestore: () => void;
+	onFork: () => void;
+	onDelete: () => void;
 }) {
 	const pinIconRef = useRef<HTMLSpanElement>(null);
+	const editIconRef = useRef<HTMLSpanElement>(null);
+	const restoreIconRef = useRef<HTMLSpanElement>(null);
+	const forkIconRef = useRef<HTMLSpanElement>(null);
+	const deleteIconRef = useRef<HTMLSpanElement>(null);
+
 	useEffect(() => {
 		if (pinIconRef.current)
 			setIcon(pinIconRef.current, isPinned ? "pin-off" : "pin");
 	}, [isPinned]);
+	useEffect(() => {
+		if (editIconRef.current) setIcon(editIconRef.current, "pencil");
+		if (restoreIconRef.current) setIcon(restoreIconRef.current, "play");
+		if (forkIconRef.current) setIcon(forkIconRef.current, "git-branch");
+		if (deleteIconRef.current) setIcon(deleteIconRef.current, "trash-2");
+	}, []);
 
 	const lastUpdated = session.updatedAt
 		? formatRelativeTime(new Date(Date.parse(session.updatedAt)))
 		: "";
+
+	const stop = (fn: () => void) => (e: React.MouseEvent) => {
+		e.stopPropagation();
+		fn();
+	};
 
 	return (
 		<div
@@ -207,17 +306,50 @@ function ConversationListItem({
 					</div>
 				)}
 			</div>
-			<button
-				type="button"
-				className="agent-client-conversation-list-item-pin"
-				onClick={(e) => {
-					e.stopPropagation();
-					onTogglePin();
-				}}
-				title={isPinned ? "Unpin conversation" : "Pin conversation"}
-			>
-				<span ref={pinIconRef} aria-hidden="true" />
-			</button>
+			<div className="agent-client-conversation-list-item-actions">
+				<button
+					type="button"
+					className="agent-client-conversation-list-item-action"
+					onClick={stop(onTogglePin)}
+					title={
+						isPinned ? "Unpin conversation" : "Pin conversation"
+					}
+				>
+					<span ref={pinIconRef} aria-hidden="true" />
+				</button>
+				<button
+					type="button"
+					className="agent-client-conversation-list-item-action"
+					onClick={stop(onEditTitle)}
+					title="Rename conversation"
+				>
+					<span ref={editIconRef} aria-hidden="true" />
+				</button>
+				<button
+					type="button"
+					className="agent-client-conversation-list-item-action agent-client-conversation-list-item-action-restore"
+					onClick={stop(onRestore)}
+					title="Restore in active chat"
+				>
+					<span ref={restoreIconRef} aria-hidden="true" />
+				</button>
+				<button
+					type="button"
+					className="agent-client-conversation-list-item-action agent-client-conversation-list-item-action-fork"
+					onClick={stop(onFork)}
+					title="Fork (open in new chat)"
+				>
+					<span ref={forkIconRef} aria-hidden="true" />
+				</button>
+				<button
+					type="button"
+					className="agent-client-conversation-list-item-action agent-client-conversation-list-item-action-delete"
+					onClick={stop(onDelete)}
+					title="Delete conversation"
+				>
+					<span ref={deleteIconRef} aria-hidden="true" />
+				</button>
+			</div>
 		</div>
 	);
 }
