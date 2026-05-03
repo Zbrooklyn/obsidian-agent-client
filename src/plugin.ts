@@ -226,6 +226,9 @@ export default class AgentClientPlugin extends Plugin {
 	private floatingChatCounter = 0;
 
 	async onload() {
+		console.log(
+			`[WARMUP] ${new Date().toISOString()} plugin.onload START`,
+		);
 		await this.loadSettings();
 
 		initializeLogger(this.settings);
@@ -379,8 +382,14 @@ export default class AgentClientPlugin extends Plugin {
 		// Eager warm-up: pre-spawn the default agent in the background after
 		// Obsidian has settled. The first chat view to open adopts this warm
 		// client and skips the ~8s spawn+handshake user-perceived wait.
+		console.log(
+			`[WARMUP] ${new Date().toISOString()} plugin.onload END (eagerWarmUp=${this.settings.eagerWarmUp})`,
+		);
 		if (this.settings.eagerWarmUp) {
 			this.app.workspace.onLayoutReady(() => {
+				console.log(
+					`[WARMUP] ${new Date().toISOString()} layout ready, scheduling warm-up in 1500ms`,
+				);
 				// Defer further so we don't compete with other plugins'
 				// post-layout init work. 1.5s is enough to clear most boot
 				// contention without making the warm-up feel slow to land.
@@ -426,10 +435,16 @@ export default class AgentClientPlugin extends Plugin {
 			if (this._warmAcpClient) {
 				client = this._warmAcpClient;
 				this._warmAcpClient = null;
+				console.log(
+					`[WARMUP] ${new Date().toISOString()} ADOPTED prewarmed AcpClient for view ${viewId}`,
+				);
 				getLogger().log(
 					`[Plugin] Adopted prewarmed AcpClient for view ${viewId}`,
 				);
 			} else {
+				console.log(
+					`[WARMUP] ${new Date().toISOString()} NO WARM CLIENT — fresh AcpClient for view ${viewId}`,
+				);
 				client = new AcpClient(this);
 			}
 			this._acpClients.set(viewId, client);
@@ -445,6 +460,10 @@ export default class AgentClientPlugin extends Plugin {
 	 */
 	private async warmUpDefaultAgent(): Promise<void> {
 		const logger = getLogger();
+		const __startedAt = performance.now();
+		console.log(
+			`[WARMUP] ${new Date().toISOString()} warmUpDefaultAgent START`,
+		);
 		try {
 			const agentId = this.settings.defaultAgentId;
 			const agentSettings = findAgentSettings(this.settings, agentId);
@@ -478,8 +497,19 @@ export default class AgentClientPlugin extends Plugin {
 			const client = new AcpClient(this);
 			await client.prewarm(config, cwd);
 			this._warmAcpClient = client;
+			const elapsed = (
+				(performance.now() - __startedAt) /
+				1000
+			).toFixed(2);
+			console.log(
+				`[WARMUP] ${new Date().toISOString()} warmUpDefaultAgent COMPLETE (${elapsed}s) — agent=${agentId}`,
+			);
 			logger.log(`[Plugin] Warm-up ready — agent=${agentId} cwd=${cwd}`);
 		} catch (err) {
+			console.log(
+				`[WARMUP] ${new Date().toISOString()} warmUpDefaultAgent FAILED:`,
+				err,
+			);
 			logger.error("[Plugin] Warm-up failed (non-fatal):", err);
 			// Best-effort cleanup so we don't leak the half-warmed client
 			if (this._warmAcpClient) {

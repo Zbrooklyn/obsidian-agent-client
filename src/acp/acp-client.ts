@@ -116,6 +116,10 @@ export class AcpClient {
 	 * Spawns the agent process and establishes ACP connection.
 	 */
 	async initialize(config: AgentConfig): Promise<InitializeResult> {
+		const __t0 = performance.now();
+		console.log(
+			`[WARMUP] ${new Date().toISOString()} AcpClient.initialize CALLED (agent=${config.id}, hasPending=${!!this.pendingInitResult}, isInitialized=${this.isInitializedFlag})`,
+		);
 		// Eager warm-up adoption: if prewarm() already initialized this client
 		// with the same agent, return the cached result instantly.
 		if (
@@ -127,12 +131,18 @@ export class AcpClient {
 			const cached = this.pendingInitResult;
 			this.pendingInitResult = null;
 			this.pendingInitAgentId = null;
+			console.log(
+				`[WARMUP] ${new Date().toISOString()} initialize CACHE HIT — instant adoption (${(performance.now() - __t0).toFixed(0)}ms)`,
+			);
 			this.logger.log(
 				"[AcpClient] Adopted prewarmed initialization (instant)",
 			);
 			return cached;
 		}
 
+		console.log(
+			`[WARMUP] ${new Date().toISOString()} initialize CACHE MISS — running real init`,
+		);
 		this.logger.log(
 			"[AcpClient] Starting initialization with config:",
 			config,
@@ -413,6 +423,10 @@ export class AcpClient {
 	 * Create a new chat session with the agent.
 	 */
 	async newSession(workingDirectory: string): Promise<SessionResult> {
+		const __t0 = performance.now();
+		console.log(
+			`[WARMUP] ${new Date().toISOString()} AcpClient.newSession CALLED (cwd=${workingDirectory}, hasPending=${!!this.pendingSessionResult}, pendingCwd=${this.pendingSessionCwd})`,
+		);
 		// Eager warm-up adoption: if prewarm() created a session for this cwd,
 		// return it instantly. Single-use — next call falls through to a real
 		// newSession.
@@ -424,11 +438,18 @@ export class AcpClient {
 			this.pendingSessionResult = null;
 			this.pendingSessionCwd = null;
 			this.currentSessionId = cached.sessionId;
+			console.log(
+				`[WARMUP] ${new Date().toISOString()} newSession CACHE HIT — instant adoption (${(performance.now() - __t0).toFixed(0)}ms)`,
+			);
 			this.logger.log(
 				"[AcpClient] Adopted prewarmed session (instant)",
 			);
 			return cached;
 		}
+
+		console.log(
+			`[WARMUP] ${new Date().toISOString()} newSession CACHE MISS — running real newSession`,
+		);
 
 		const connection = this.requireConnection();
 
