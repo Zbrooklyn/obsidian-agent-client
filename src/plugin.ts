@@ -47,6 +47,7 @@ import {
 } from "./types/agent";
 import type { SavedSessionInfo } from "./types/session";
 import { initializeLogger, getLogger } from "./utils/logger";
+import { setWarmupTracePath, warmupLog } from "./utils/warmup-trace";
 
 // Re-export for backward compatibility
 export type { AgentEnvVar, CustomAgentSettings };
@@ -229,7 +230,24 @@ export default class AgentClientPlugin extends Plugin {
 	private floatingChatCounter = 0;
 
 	async onload() {
-		console.log(
+		// Initialize file trace at the vault's plugin folder.
+		try {
+			const adapter = this.app.vault.adapter;
+			if (adapter instanceof FileSystemAdapter) {
+				setWarmupTracePath(
+					[
+						adapter.getBasePath(),
+						".obsidian",
+						"plugins",
+						"agent-client",
+						"warmup-trace.log",
+					].join("/"),
+				);
+			}
+		} catch {
+			// Silent — trace just won't write
+		}
+		warmupLog(
 			`[WARMUP] ${new Date().toISOString()} plugin.onload START`,
 		);
 		await this.loadSettings();
@@ -393,7 +411,7 @@ export default class AgentClientPlugin extends Plugin {
 		// (instantiating AcpClient + publishing _warmAcpClient) executes
 		// before any view onOpen, so layout-restored views adopt the warm
 		// client and join its in-flight init+newSession via coalescing.
-		console.log(
+		warmupLog(
 			`[WARMUP] ${new Date().toISOString()} plugin.onload END (eagerWarmUp=${this.settings.eagerWarmUp})`,
 		);
 		if (this.settings.eagerWarmUp) {
@@ -436,7 +454,7 @@ export default class AgentClientPlugin extends Plugin {
 			if (this._warmAcpClient) {
 				client = this._warmAcpClient;
 				this._warmAcpClient = null;
-				console.log(
+				warmupLog(
 					`[WARMUP] ${new Date().toISOString()} ADOPTED prewarmed AcpClient for view ${viewId}`,
 				);
 				getLogger().log(
@@ -452,7 +470,7 @@ export default class AgentClientPlugin extends Plugin {
 					}, 0);
 				}
 			} else {
-				console.log(
+				warmupLog(
 					`[WARMUP] ${new Date().toISOString()} NO WARM CLIENT — fresh AcpClient for view ${viewId}`,
 				);
 				client = new AcpClient(this);
@@ -479,7 +497,7 @@ export default class AgentClientPlugin extends Plugin {
 	 */
 	private async warmUpDefaultAgent(): Promise<void> {
 		if (this._warmUpInFlight || this._warmAcpClient) {
-			console.log(
+			warmupLog(
 				`[WARMUP] ${new Date().toISOString()} warmUpDefaultAgent SKIPPED (inFlight=${this._warmUpInFlight}, hasWarm=${!!this._warmAcpClient})`,
 			);
 			return;
@@ -487,7 +505,7 @@ export default class AgentClientPlugin extends Plugin {
 		this._warmUpInFlight = true;
 		const logger = getLogger();
 		const __startedAt = performance.now();
-		console.log(
+		warmupLog(
 			`[WARMUP] ${new Date().toISOString()} warmUpDefaultAgent START`,
 		);
 		try {
@@ -534,14 +552,13 @@ export default class AgentClientPlugin extends Plugin {
 				(performance.now() - __startedAt) /
 				1000
 			).toFixed(2);
-			console.log(
+			warmupLog(
 				`[WARMUP] ${new Date().toISOString()} warmUpDefaultAgent COMPLETE (${elapsed}s) — agent=${agentId}`,
 			);
 			logger.log(`[Plugin] Warm-up ready — agent=${agentId} cwd=${cwd}`);
 		} catch (err) {
-			console.log(
-				`[WARMUP] ${new Date().toISOString()} warmUpDefaultAgent FAILED:`,
-				err,
+			warmupLog(
+				`[WARMUP] ${new Date().toISOString()} warmUpDefaultAgent FAILED: ${String(err)}`,
 			);
 			logger.error("[Plugin] Warm-up failed (non-fatal):", err);
 			// Best-effort cleanup so we don't leak the half-warmed client
@@ -555,6 +572,17 @@ export default class AgentClientPlugin extends Plugin {
 			}
 		} finally {
 			this._warmUpInFlight = false;
+			// If the warm client was consumed mid-flight (a view adopted
+			// it), refill the pool so the NEXT new chat is also instant.
+			// Otherwise the second-and-beyond chat would cold-spawn.
+			if (!this._warmAcpClient && this.settings.eagerWarmUp) {
+				warmupLog(
+					`[WARMUP] ${new Date().toISOString()} warm client was consumed during warm-up — scheduling refill`,
+				);
+				window.setTimeout(() => {
+					void this.warmUpDefaultAgent();
+				}, 0);
+			}
 		}
 	}
 
