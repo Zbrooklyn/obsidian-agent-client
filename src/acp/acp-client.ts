@@ -76,6 +76,15 @@ export class AcpClient {
 	private pendingSessionResult: SessionResult | null = null;
 	private pendingSessionCwd: string | null = null;
 
+	// Sticky cache of the last successful initialize() result. Makes
+	// initialize() idempotent for the same agent — repeat calls return this
+	// instead of killing the running process and respawning. Critical for
+	// the auto-resume-then-fallback path, which would otherwise spawn twice.
+	private lastInitResult: InitializeResult | null = null;
+	// Promise of an in-flight initialize() call. Concurrent calls await
+	// this rather than racing to kill each other's processes.
+	private initInFlight: Promise<InitializeResult> | null = null;
+
 	// Callbacks (none — all events flow through onSessionUpdate via AcpHandler)
 
 	// Delegates
@@ -140,6 +149,47 @@ export class AcpClient {
 			return cached;
 		}
 
+		// Idempotency: if already initialized for the SAME agent, return the
+		// sticky last result rather than killing and respawning. This is the
+		// fix for the auto-resume failure path — restoreSession internally
+		// initializes; if it then throws, the fallback agent.createSession()
+		// would call initialize() a second time and kill the just-spawned
+		// process. Skip that.
+		if (
+			this.isInitializedFlag &&
+			this.currentAgentId === config.id &&
+			this.lastInitResult &&
+			this.agentProcess
+		) {
+			console.log(
+				`[WARMUP] ${new Date().toISOString()} initialize IDEMPOTENT HIT — returning cached (${(performance.now() - __t0).toFixed(0)}ms)`,
+			);
+			this.logger.log(
+				"[AcpClient] Already initialized for agent, returning cached result",
+			);
+			return this.lastInitResult;
+		}
+
+		// Coalesce concurrent initialize() calls so we never spawn twice in a
+		// single tight window (e.g. resume-then-fallback before the first
+		// resolves).
+		if (this.initInFlight) {
+			console.log(
+				`[WARMUP] ${new Date().toISOString()} initialize JOIN IN-FLIGHT — awaiting existing call`,
+			);
+			return this.initInFlight;
+		}
+
+		// Mark in-flight via a manually-resolved Promise. Concurrent callers
+		// hit the JOIN branch above instead of spawning a duplicate process.
+		// Resolved/rejected at the success/throw points below.
+		let resolveInFlight: (v: InitializeResult) => void = () => {};
+		let rejectInFlight: (e: unknown) => void = () => {};
+		this.initInFlight = new Promise<InitializeResult>((resolve, reject) => {
+			resolveInFlight = resolve;
+			rejectInFlight = reject;
+		});
+
 		console.log(
 			`[WARMUP] ${new Date().toISOString()} initialize CACHE MISS — running real init`,
 		);
@@ -151,9 +201,12 @@ export class AcpClient {
 			`[AcpClient] Current state - process: ${!!this.agentProcess}, PID: ${this.agentProcess?.pid}`,
 		);
 
-		// Clean up existing process if any (e.g., when switching agents)
+		// Clean up existing process if any (e.g., when switching agents).
+		// Also invalidate the idempotency cache so the next initialize for
+		// the new agent runs fresh.
 		if (this.agentProcess) {
 			this.killProcessTree();
+			this.lastInitResult = null;
 		}
 
 		// Clean up existing connection
@@ -407,13 +460,21 @@ export class AcpClient {
 			this.isInitializedFlag = true;
 			this.currentAgentId = config.id;
 
-			return AcpTypeConverter.toInitializeResult(initResult);
+			const result = AcpTypeConverter.toInitializeResult(initResult);
+			// Cache for idempotent re-init + resolve coalesced waiters.
+			this.lastInitResult = result;
+			resolveInFlight(result);
+			this.initInFlight = null;
+			return result;
 		} catch (error) {
 			this.logger.error("[AcpClient] Initialization Error:", error);
 
 			// Reset flags on failure
 			this.isInitializedFlag = false;
 			this.currentAgentId = null;
+			this.lastInitResult = null;
+			rejectInFlight(error);
+			this.initInFlight = null;
 
 			throw error;
 		}

@@ -220,6 +220,9 @@ export default class AgentClientPlugin extends Plugin {
 	// first getOrCreateAcpClient() call. Null if warm-up is disabled,
 	// failed, or has already been adopted.
 	private _warmAcpClient: AcpClient | null = null;
+	// Set to true while warmUpDefaultAgent() is mid-flight, to prevent
+	// stacking concurrent warm-ups when multiple views open in succession.
+	private _warmUpInFlight = false;
 	/** Floating button container (independent from chat view instances) */
 	private floatingButton: FloatingButtonContainer | null = null;
 	/** Counter for generating unique floating chat instance IDs */
@@ -441,11 +444,29 @@ export default class AgentClientPlugin extends Plugin {
 				getLogger().log(
 					`[Plugin] Adopted prewarmed AcpClient for view ${viewId}`,
 				);
+				// Re-warm in the background so the NEXT new chat is also
+				// instant. Single-slot pool — only one prewarmed client
+				// at a time, but it refills the moment the previous is
+				// consumed.
+				if (this.settings.eagerWarmUp) {
+					window.setTimeout(() => {
+						void this.warmUpDefaultAgent();
+					}, 0);
+				}
 			} else {
 				console.log(
 					`[WARMUP] ${new Date().toISOString()} NO WARM CLIENT — fresh AcpClient for view ${viewId}`,
 				);
 				client = new AcpClient(this);
+				// No warm client to adopt — kick off a warm-up so future
+				// new chats benefit (covers the case where Obsidian
+				// restored a chat view at boot, causing the original
+				// warm-up to miss this view).
+				if (this.settings.eagerWarmUp && !this._warmUpInFlight) {
+					window.setTimeout(() => {
+						void this.warmUpDefaultAgent();
+					}, 0);
+				}
 			}
 			this._acpClients.set(viewId, client);
 		}
@@ -459,6 +480,13 @@ export default class AgentClientPlugin extends Plugin {
 	 * normal lazy spawn.
 	 */
 	private async warmUpDefaultAgent(): Promise<void> {
+		if (this._warmUpInFlight || this._warmAcpClient) {
+			console.log(
+				`[WARMUP] ${new Date().toISOString()} warmUpDefaultAgent SKIPPED (inFlight=${this._warmUpInFlight}, hasWarm=${!!this._warmAcpClient})`,
+			);
+			return;
+		}
+		this._warmUpInFlight = true;
 		const logger = getLogger();
 		const __startedAt = performance.now();
 		console.log(
@@ -520,6 +548,8 @@ export default class AgentClientPlugin extends Plugin {
 				}
 				this._warmAcpClient = null;
 			}
+		} finally {
+			this._warmUpInFlight = false;
 		}
 	}
 
