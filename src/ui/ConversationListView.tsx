@@ -33,6 +33,37 @@ function formatRelativeTime(date: Date): string {
 	return date.toLocaleDateString();
 }
 
+type DateBucket = "today" | "yesterday" | "thisWeek" | "older";
+const BUCKET_LABEL: Record<DateBucket, string> = {
+	today: "Today",
+	yesterday: "Yesterday",
+	thisWeek: "This week",
+	older: "Older",
+};
+const BUCKET_ORDER: DateBucket[] = [
+	"today",
+	"yesterday",
+	"thisWeek",
+	"older",
+];
+
+function bucketForDate(date: Date | null): DateBucket {
+	if (!date) return "older";
+	const now = new Date();
+	const startOfToday = new Date(
+		now.getFullYear(),
+		now.getMonth(),
+		now.getDate(),
+	).getTime();
+	const startOfYesterday = startOfToday - 24 * 60 * 60 * 1000;
+	const startOfWeek = startOfToday - 7 * 24 * 60 * 60 * 1000;
+	const t = date.getTime();
+	if (t >= startOfToday) return "today";
+	if (t >= startOfYesterday) return "yesterday";
+	if (t >= startOfWeek) return "thisWeek";
+	return "older";
+}
+
 function ConversationListPanel({ plugin }: { plugin: AgentClientPlugin }) {
 	const [sessions, setSessions] = useState<SavedSessionInfo[]>(
 		plugin.settings.savedSessions ?? [],
@@ -41,44 +72,121 @@ function ConversationListPanel({ plugin }: { plugin: AgentClientPlugin }) {
 		new Set(plugin.settings.pinnedSessionIds ?? []),
 	);
 	const [searchQuery, setSearchQuery] = useState("");
+	// sessionId of the conversation currently shown in the focused chat
+	// tab. Drives the active-row highlight in the list.
+	const [activeSessionId, setActiveSessionId] = useState<string | null>(
+		null,
+	);
 
-	// Refresh when settings change (poll lightly — Obsidian doesn't expose
-	// a settings-change event for plugin settings, so we re-read on focus).
+	const computeActiveSessionId = useCallback((): string | null => {
+		const focusedId = plugin.viewRegistry.getFocusedId();
+		const clients = plugin.getAcpClients();
+		if (!focusedId) {
+			// Fallback: first chat view's session if any
+			const firstClient = clients.values().next().value;
+			return firstClient?.getCurrentSessionId?.() ?? null;
+		}
+		const client = plugin.getAcpClient(focusedId);
+		return client?.getCurrentSessionId?.() ?? null;
+	}, [plugin]);
+
+	// Refresh when settings change OR active leaf changes. Poll as a
+	// fallback for state changes Obsidian doesn't surface as events.
 	useEffect(() => {
 		const refresh = () => {
 			setSessions([...(plugin.settings.savedSessions ?? [])]);
 			setPinnedIds(new Set(plugin.settings.pinnedSessionIds ?? []));
+			setActiveSessionId(computeActiveSessionId());
 		};
+		refresh();
 		const interval = window.setInterval(refresh, 1500);
 		const onFocus = () => refresh();
 		window.addEventListener("focus", onFocus);
+		const evt = plugin.app.workspace.on("active-leaf-change", refresh);
 		return () => {
 			window.clearInterval(interval);
 			window.removeEventListener("focus", onFocus);
+			plugin.app.workspace.offref(evt);
 		};
-	}, [plugin]);
+	}, [plugin, computeActiveSessionId]);
 
-	const filteredAndSorted = useMemo(() => {
+	// Group conversations into Pinned section + date buckets (Today /
+	// Yesterday / This week / Older). Each group sorts by updatedAt desc.
+	const groupedSections = useMemo(() => {
 		const q = searchQuery.trim().toLowerCase();
 		const filtered = q
 			? sessions.filter((s) =>
 					(s.title ?? "").toLowerCase().includes(q),
 				)
 			: sessions;
-		// Pinned first, then by lastUpdated descending
-		return [...filtered].sort((a, b) => {
-			const aPinned = pinnedIds.has(a.sessionId);
-			const bPinned = pinnedIds.has(b.sessionId);
-			if (aPinned !== bPinned) return aPinned ? -1 : 1;
+
+		const pinned: SavedSessionInfo[] = [];
+		const buckets: Record<DateBucket, SavedSessionInfo[]> = {
+			today: [],
+			yesterday: [],
+			thisWeek: [],
+			older: [],
+		};
+
+		for (const s of filtered) {
+			if (pinnedIds.has(s.sessionId)) {
+				pinned.push(s);
+				continue;
+			}
+			const date = s.updatedAt
+				? new Date(Date.parse(s.updatedAt))
+				: null;
+			buckets[bucketForDate(date)].push(s);
+		}
+
+		const sortByRecent = (
+			a: SavedSessionInfo,
+			b: SavedSessionInfo,
+		) => {
 			const aTime = a.updatedAt ? Date.parse(a.updatedAt) : 0;
 			const bTime = b.updatedAt ? Date.parse(b.updatedAt) : 0;
 			return bTime - aTime;
-		});
+		};
+		pinned.sort(sortByRecent);
+		for (const bucket of BUCKET_ORDER) buckets[bucket].sort(sortByRecent);
+
+		const sections: Array<{
+			key: string;
+			label: string;
+			items: SavedSessionInfo[];
+		}> = [];
+		if (pinned.length > 0) {
+			sections.push({ key: "pinned", label: "Pinned", items: pinned });
+		}
+		for (const bucket of BUCKET_ORDER) {
+			if (buckets[bucket].length > 0) {
+				sections.push({
+					key: bucket,
+					label: BUCKET_LABEL[bucket],
+					items: buckets[bucket],
+				});
+			}
+		}
+		return sections;
 	}, [sessions, pinnedIds, searchQuery]);
 
 	const handleClickSession = useCallback(
 		async (session: SavedSessionInfo) => {
-			await plugin.restoreSessionInActiveOrNewChatView(
+			// Default click semantics: open in new tab if not already open,
+			// else focus the tab that has it. Browser/IDE pattern — never
+			// loses the user's current chat by replacing it.
+			await plugin.openConversationInTab(
+				session.sessionId,
+				session.cwd,
+				session.agentId,
+			);
+		},
+		[plugin],
+	);
+
+	const handleOpenInCurrentTab = useCallback(
+		async (session: SavedSessionInfo) => {
+			await plugin.openConversationInCurrentTab(
 				session.sessionId,
 				session.cwd,
 				session.agentId,
@@ -173,6 +281,25 @@ function ConversationListPanel({ plugin }: { plugin: AgentClientPlugin }) {
 		[plugin],
 	);
 
+	// Cmd/Ctrl+F focuses search input when panel has focus
+	const panelRef = useRef<HTMLDivElement>(null);
+	const searchInputRef = useRef<HTMLInputElement>(null);
+	useEffect(() => {
+		const handler = (e: KeyboardEvent) => {
+			if (
+				(e.ctrlKey || e.metaKey) &&
+				e.key.toLowerCase() === "f" &&
+				panelRef.current?.contains(document.activeElement)
+			) {
+				e.preventDefault();
+				searchInputRef.current?.focus();
+				searchInputRef.current?.select();
+			}
+		};
+		document.addEventListener("keydown", handler);
+		return () => document.removeEventListener("keydown", handler);
+	}, []);
+
 	const searchIconRef = useRef<HTMLSpanElement>(null);
 	useEffect(() => {
 		if (searchIconRef.current)
@@ -211,25 +338,44 @@ function ConversationListPanel({ plugin }: { plugin: AgentClientPlugin }) {
 				/>
 			</div>
 			<div className="agent-client-conversation-list-items">
-				{filteredAndSorted.length === 0 && (
+				{groupedSections.length === 0 && (
 					<div className="agent-client-conversation-list-empty">
 						{searchQuery
 							? "No conversations match your search."
 							: "No saved conversations yet."}
 					</div>
 				)}
-				{filteredAndSorted.map((session) => (
-					<ConversationListItem
-						key={session.sessionId}
-						session={session}
-						isPinned={pinnedIds.has(session.sessionId)}
-						onClick={() => void handleClickSession(session)}
-						onTogglePin={() => handleTogglePin(session.sessionId)}
-						onEditTitle={() => handleEditTitle(session)}
-						onRestore={() => void handleClickSession(session)}
-						onFork={() => handleFork(session)}
-						onDelete={() => handleDelete(session)}
-					/>
+				{groupedSections.map((section) => (
+					<div
+						key={section.key}
+						className="agent-client-conversation-list-section"
+					>
+						<div className="agent-client-conversation-list-section-header">
+							{section.label}
+						</div>
+						{section.items.map((session) => (
+							<ConversationListItem
+								key={session.sessionId}
+								session={session}
+								isPinned={pinnedIds.has(session.sessionId)}
+								isActive={
+									activeSessionId === session.sessionId
+								}
+								onClick={() =>
+									void handleClickSession(session)
+								}
+								onTogglePin={() =>
+									handleTogglePin(session.sessionId)
+								}
+								onEditTitle={() => handleEditTitle(session)}
+								onOpenInCurrent={() =>
+									void handleOpenInCurrentTab(session)
+								}
+								onFork={() => handleFork(session)}
+								onDelete={() => handleDelete(session)}
+							/>
+						))}
+					</div>
 				))}
 			</div>
 		</div>
@@ -239,19 +385,21 @@ function ConversationListPanel({ plugin }: { plugin: AgentClientPlugin }) {
 function ConversationListItem({
 	session,
 	isPinned,
+	isActive,
 	onClick,
 	onTogglePin,
 	onEditTitle,
-	onRestore,
+	onOpenInCurrent,
 	onFork,
 	onDelete,
 }: {
 	session: SavedSessionInfo;
 	isPinned: boolean;
+	isActive: boolean;
 	onClick: () => void;
 	onTogglePin: () => void;
 	onEditTitle: () => void;
-	onRestore: () => void;
+	onOpenInCurrent: () => void;
 	onFork: () => void;
 	onDelete: () => void;
 }) {
@@ -290,13 +438,13 @@ function ConversationListItem({
 			);
 			menu.addItem((item) =>
 				item
-					.setTitle("Restore in active chat")
-					.setIcon("play")
-					.onClick(() => onRestore()),
+					.setTitle("Open in current tab")
+					.setIcon("arrow-right")
+					.onClick(() => onOpenInCurrent()),
 			);
 			menu.addItem((item) =>
 				item
-					.setTitle("Fork (open in new chat)")
+					.setTitle("Fork (new chat)")
 					.setIcon("git-branch")
 					.onClick(() => onFork()),
 			);
@@ -314,7 +462,7 @@ function ConversationListItem({
 			isPinned,
 			onTogglePin,
 			onEditTitle,
-			onRestore,
+			onOpenInCurrent,
 			onFork,
 			onDelete,
 		],
@@ -328,10 +476,74 @@ function ConversationListItem({
 		[onTogglePin],
 	);
 
+	const handleKeyDown = useCallback(
+		(e: React.KeyboardEvent<HTMLDivElement>) => {
+			if (e.key === "Enter" || e.key === " ") {
+				e.preventDefault();
+				onClick();
+				return;
+			}
+			if (e.key === "ArrowDown") {
+				e.preventDefault();
+				const next = (e.currentTarget.parentElement
+					?.nextElementSibling as HTMLElement | null)?.querySelector(
+					".agent-client-conversation-list-item",
+				) as HTMLElement | null;
+				const sibling =
+					(e.currentTarget
+						.nextElementSibling as HTMLElement | null) ?? next;
+				sibling?.focus?.();
+				return;
+			}
+			if (e.key === "ArrowUp") {
+				e.preventDefault();
+				const prev = e.currentTarget
+					.previousElementSibling as HTMLElement | null;
+				if (
+					prev &&
+					prev.classList.contains(
+						"agent-client-conversation-list-item",
+					)
+				) {
+					prev.focus();
+				} else {
+					// Top of section — try previous section's last item
+					const prevSection = e.currentTarget.parentElement
+						?.previousElementSibling as HTMLElement | null;
+					const items = prevSection?.querySelectorAll(
+						".agent-client-conversation-list-item",
+					);
+					const last = items?.[items.length - 1] as
+						| HTMLElement
+						| undefined;
+					if (last) {
+						last.focus();
+					} else {
+						// Move focus back to search input
+						const search = document.querySelector(
+							".agent-client-conversation-list-search-input",
+						) as HTMLInputElement | null;
+						search?.focus();
+					}
+				}
+			}
+		},
+		[onClick],
+	);
+
+	const handleContextMenu = useCallback(
+		(e: React.MouseEvent) => {
+			handleShowOverflow(e);
+		},
+		[handleShowOverflow],
+	);
+
 	return (
 		<div
-			className={`agent-client-conversation-list-item${isPinned ? " agent-client-conversation-list-item-pinned" : ""}`}
+			className={`agent-client-conversation-list-item${isPinned ? " agent-client-conversation-list-item-pinned" : ""}${isActive ? " agent-client-conversation-list-item-active" : ""}`}
 			onClick={onClick}
+			onContextMenu={handleContextMenu}
+			onKeyDown={handleKeyDown}
 			role="button"
 			tabIndex={0}
 		>

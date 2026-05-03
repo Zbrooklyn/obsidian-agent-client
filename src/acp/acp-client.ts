@@ -587,6 +587,15 @@ export class AcpClient {
 	}
 
 	/**
+	 * Public read of the current session id, used by plugin-level helpers
+	 * (e.g. ConversationListView click → focus existing tab if it has the
+	 * same session loaded).
+	 */
+	getCurrentSessionId(): string | null {
+		return this.currentSessionId;
+	}
+
+	/**
 	 * Eager warm-up: spawn the agent process and create a first session in
 	 * the background, before any chat view is opened. The cached results are
 	 * adopted by the next initialize() / newSession() call with matching

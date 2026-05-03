@@ -127,12 +127,7 @@ function SidebarHeader({
 				)}
 				<NavActionButton
 					icon="plus"
-					label="New chat in this view"
-					onClick={onNewChat}
-				/>
-				<NavActionButton
-					icon="copy-plus"
-					label="Open chat in new tab"
+					label="New chat (opens in new tab)"
 					onClick={onOpenInNewTab}
 				/>
 				{onOpenHistory && (

@@ -1794,6 +1794,26 @@ If your plugin does not need CSS, delete this file.
 	text-align: center;
 }
 
+.agent-client-conversation-list-section {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	margin-top: 8px;
+}
+
+.agent-client-conversation-list-section:first-child {
+	margin-top: 0;
+}
+
+.agent-client-conversation-list-section-header {
+	padding: 6px 12px 4px;
+	font-size: var(--font-ui-smaller);
+	font-weight: var(--font-semibold);
+	text-transform: uppercase;
+	letter-spacing: 0.05em;
+	color: var(--text-faint);
+}
+
 .agent-client-conversation-list-item {
 	display: flex;
 	align-items: center;
@@ -1820,6 +1840,21 @@ If your plugin does not need CSS, delete this file.
 	border-left: 2px solid var(--text-accent);
 	padding-left: 10px;
 	background: var(--background-modifier-hover);
+}
+
+/* Active conversation (the one currently shown in the focused chat tab):
+   strong accent left-border + clear background tint so the user always
+   knows where they are. Wins over pinned styling when both apply. */
+.agent-client-conversation-list-item-active {
+	border-left: 3px solid var(--interactive-accent);
+	padding-left: 9px;
+	background: var(--background-modifier-active-hover);
+}
+
+.agent-client-conversation-list-item-active
+	.agent-client-conversation-list-item-title {
+	color: var(--text-accent);
+	font-weight: var(--font-semibold);
 }
 
 .agent-client-conversation-list-item-content {

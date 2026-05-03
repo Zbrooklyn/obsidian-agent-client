@@ -476,6 +476,18 @@ export default class AgentClientPlugin extends Plugin {
 	 * Get or create an AcpClient for a specific view.
 	 * Each ChatView has its own AcpClient for independent sessions.
 	 */
+	/**
+	 * Read access to the per-view AcpClient map. Used by side-panel
+	 * features (e.g. ConversationListView active-row indicator) to ask
+	 * "what session is the focused chat tab currently showing?"
+	 */
+	getAcpClient(viewId: string): AcpClient | undefined {
+		return this._acpClients.get(viewId);
+	}
+	getAcpClients(): ReadonlyMap<string, AcpClient> {
+		return this._acpClients;
+	}
+
 	getOrCreateAcpClient(viewId: string): AcpClient {
 		let client = this._acpClients.get(viewId);
 		if (!client) {
@@ -800,48 +812,36 @@ export default class AgentClientPlugin extends Plugin {
 	}
 
 	/**
-	 * Restore a saved session in the currently focused chat view, or open
-	 * a new chat tab if none exists. Used by ConversationListView click
-	 * handler to make the side panel feel like Slack/Discord channel
-	 * switching.
+	 * Open a saved conversation. If a tab already shows this exact session,
+	 * focus that tab. Otherwise open a new tab and restore the session there.
+	 *
+	 * This is the default behavior for clicking a conversation in the side
+	 * panel — matches browser/IDE tab semantics: never lose the user's
+	 * current chat by replacing it.
 	 */
-	async restoreSessionInActiveOrNewChatView(
+	async openConversationInTab(
 		sessionId: string,
 		cwd: string,
 		agentId: string,
 	): Promise<void> {
 		const { workspace } = this.app;
-		// Prefer the most-recently-active chat leaf if any are open.
-		const chatLeaves = workspace.getLeavesOfType(VIEW_TYPE_CHAT);
-		const targetLeaf = chatLeaves[0];
 
-		const state = {
-			initialAgentId: agentId,
-			restoreSessionId: sessionId,
-			restoreSessionCwd: cwd,
-		};
-
-		if (targetLeaf) {
-			// Existing leaf: setViewState alone does NOT re-mount React.
-			// Imperatively poke the running ChatView so its ChatPanel
-			// re-runs the restore flow against the new sessionId.
-			const view = targetLeaf.view as ChatView | undefined;
-			if (view && typeof view.requestRestore === "function") {
-				view.requestRestore(sessionId, cwd);
-			} else {
-				// Fallback: some leaves may not be ChatView (rare). Update
-				// state and reveal so a subsequent mount picks it up.
-				await targetLeaf.setViewState({
-					type: VIEW_TYPE_CHAT,
-					active: true,
-					state,
-				});
+		// Look for an existing tab that already has this session loaded.
+		for (const [viewId, client] of this._acpClients) {
+			if (client.getCurrentSessionId() === sessionId) {
+				const chatLeaves = workspace.getLeavesOfType(VIEW_TYPE_CHAT);
+				const match = chatLeaves.find(
+					(l) =>
+						(l.view as ChatView | undefined)?.viewId === viewId,
+				);
+				if (match) {
+					await workspace.revealLeaf(match);
+					return;
+				}
 			}
-			await workspace.revealLeaf(targetLeaf);
-			return;
 		}
 
-		// No existing chat leaf — open a new tab and direct it to restore.
+		// Not open anywhere — create a new tab with restore-target state.
 		const newLeaf = this.createNewChatLeaf(true);
 		if (!newLeaf) {
 			new Notice("[Agent Client] Could not open chat view");
@@ -850,9 +850,49 @@ export default class AgentClientPlugin extends Plugin {
 		await newLeaf.setViewState({
 			type: VIEW_TYPE_CHAT,
 			active: true,
-			state,
+			state: {
+				initialAgentId: agentId,
+				restoreSessionId: sessionId,
+				restoreSessionCwd: cwd,
+			},
 		});
 		await workspace.revealLeaf(newLeaf);
+	}
+
+	/**
+	 * Restore a session in the currently-focused chat tab, replacing what's
+	 * there. Explicit override path for users who want to swap the current
+	 * tab's content rather than open a new one.
+	 */
+	async openConversationInCurrentTab(
+		sessionId: string,
+		cwd: string,
+		_agentId: string,
+	): Promise<void> {
+		const { workspace } = this.app;
+		const chatLeaves = workspace.getLeavesOfType(VIEW_TYPE_CHAT);
+		const targetLeaf = chatLeaves[0];
+		if (!targetLeaf) {
+			// No active leaf — fall through to new tab semantics.
+			return this.openConversationInTab(sessionId, cwd, _agentId);
+		}
+		const view = targetLeaf.view as ChatView | undefined;
+		if (view && typeof view.requestRestore === "function") {
+			view.requestRestore(sessionId, cwd);
+		}
+		await workspace.revealLeaf(targetLeaf);
+	}
+
+	/**
+	 * @deprecated Use openConversationInTab (default) or
+	 * openConversationInCurrentTab (explicit override).
+	 */
+	async restoreSessionInActiveOrNewChatView(
+		sessionId: string,
+		cwd: string,
+		agentId: string,
+	): Promise<void> {
+		return this.openConversationInTab(sessionId, cwd, agentId);
 	}
 
 	/**
