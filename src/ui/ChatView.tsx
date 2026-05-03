@@ -73,6 +73,8 @@ function ChatComponent({
 				variant="sidebar"
 				viewId={viewId}
 				initialAgentId={restoredAgentId}
+				forceFresh={view.forceFresh}
+				onForceFreshConsumed={() => view.consumeForceFresh()}
 				viewHost={view}
 				onRegisterCallbacks={(callbacks) =>
 					view.setCallbacks(callbacks)
@@ -86,6 +88,14 @@ function ChatComponent({
 /** State stored for view persistence */
 interface ChatViewState extends Record<string, unknown> {
 	initialAgentId?: string;
+	/**
+	 * If true, this view should mount with a FRESH session and skip the
+	 * auto-resume-last-session path. Set when the user explicitly opens a
+	 * new chat tab. Consumed (read) on first mount; the running session's
+	 * own ID then becomes the persisted state. Subsequent reloads of this
+	 * leaf re-resume that session normally.
+	 */
+	forceFresh?: boolean;
 }
 
 export class ChatView extends ItemView implements IChatViewContainer {
@@ -98,6 +108,19 @@ export class ChatView extends ItemView implements IChatViewContainer {
 	readonly viewType: ChatViewType = "sidebar";
 	/** Initial agent ID passed via state (for openNewChatViewWithAgent) */
 	private initialAgentId: string | null = null;
+	/**
+	 * Force-fresh flag carried from state. Consumed once on mount.
+	 * See ChatViewState.forceFresh.
+	 */
+	private forceFreshOnMount: boolean = false;
+	/** True only between setState and the first ChatPanel mount completing */
+	get forceFresh(): boolean {
+		return this.forceFreshOnMount;
+	}
+	/** Mark forceFresh as consumed (called by ChatPanel after first effect run) */
+	consumeForceFresh(): void {
+		this.forceFreshOnMount = false;
+	}
 	/** Callbacks to notify React when agentId is restored from workspace state */
 	private agentIdRestoredCallbacks: Set<(agentId: string) => void> =
 		new Set();
@@ -137,6 +160,9 @@ export class ChatView extends ItemView implements IChatViewContainer {
 	 * Get the view state for persistence.
 	 */
 	getState(): ChatViewState {
+		// forceFresh deliberately NOT serialized — it's a one-time
+		// instruction from openNewChatViewWithAgent and should not survive
+		// reloads (the leaf's session, once created, IS what gets resumed).
 		return {
 			initialAgentId: this.initialAgentId ?? undefined,
 		};
@@ -152,6 +178,7 @@ export class ChatView extends ItemView implements IChatViewContainer {
 	): Promise<void> {
 		const previousAgentId = this.initialAgentId;
 		this.initialAgentId = state.initialAgentId ?? null;
+		if (state.forceFresh === true) this.forceFreshOnMount = true;
 		await super.setState(state, result);
 
 		// Notify React when agentId is restored and differs from previous value

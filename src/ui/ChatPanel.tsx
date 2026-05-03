@@ -92,6 +92,16 @@ export interface ChatPanelProps {
 	viewHost?: IChatViewHost;
 	/** External container element for focus tracking (floating uses parent's container) */
 	containerEl?: HTMLElement | null;
+	/**
+	 * If true, this mount should skip the auto-resume-last-session path and
+	 * create a fresh session. Set when the user clicked "Open chat in new
+	 * tab" — they want a NEW conversation, not a continuation of whatever
+	 * was last active globally.
+	 */
+	forceFresh?: boolean;
+	/** Called once after the mount-time auto-resume decision has been made,
+	 * so the view can clear its forceFresh flag (consumed = single-use). */
+	onForceFreshConsumed?: () => void;
 }
 
 // ============================================================================
@@ -132,6 +142,8 @@ export function ChatPanel({
 	onFloatingHeaderMouseDown,
 	viewHost: viewHostProp,
 	containerEl: containerElProp,
+	forceFresh = false,
+	onForceFreshConsumed,
 }: ChatPanelProps) {
 	// ============================================================
 	// Platform Check
@@ -578,10 +590,20 @@ export function ChatPanel({
 			config?.agent || initialAgentId || plugin.settings.defaultAgentId;
 		const settings = plugin.settings;
 		const candidate = settings.lastActiveSession;
+		// forceFresh wins: user explicitly opened a new tab and wants a
+		// brand-new chat, not the last-active one.
 		const shouldTryResume =
+			!forceFresh &&
 			settings.autoResumeLastSession &&
 			candidate &&
 			candidate.agentId === targetAgentId;
+		// Consume the flag immediately — it's a one-time instruction. If the
+		// view re-mounts later (e.g. after Obsidian reload), forceFresh will
+		// be false and normal auto-resume can kick in for the now-running
+		// session.
+		if (forceFresh && onForceFreshConsumed) {
+			onForceFreshConsumed();
+		}
 
 		warmupLog(
 			`[WARMUP] ${new Date().toISOString()} ChatPanel mount useEffect — shouldTryResume=${shouldTryResume} candidateId=${candidate?.sessionId} candidateAgent=${candidate?.agentId} targetAgent=${targetAgentId}`,

@@ -760,7 +760,10 @@ export default class AgentClientPlugin extends Plugin {
 		await leaf.setViewState({
 			type: VIEW_TYPE_CHAT,
 			active: true,
-			state: { initialAgentId: agentId },
+			// forceFresh tells ChatPanel to skip auto-resume-last-session
+			// for this leaf — it's an explicit user-initiated NEW chat,
+			// not a layout-restored continuation.
+			state: { initialAgentId: agentId, forceFresh: true },
 		});
 
 		await this.app.workspace.revealLeaf(leaf);
