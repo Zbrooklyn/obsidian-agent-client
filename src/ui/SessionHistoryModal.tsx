@@ -222,6 +222,10 @@ interface SessionHistoryContentProps {
 		newTitle: string,
 		sessionCwd: string,
 	) => void | Promise<void>;
+	/** Set of session IDs the user has pinned. Pinned sessions sort to top. */
+	pinnedSessionIds: Set<string>;
+	/** Callback to toggle pinned state of a session */
+	onTogglePin: (sessionId: string) => void;
 	/** Callback to load more sessions (pagination) */
 	onLoadMore: () => void;
 	/** Callback to fetch sessions with filter */
@@ -389,21 +393,25 @@ function SessionItem({
 	session,
 	canRestore,
 	canFork,
+	isPinned,
 	currentCwd,
 	onRestoreSession,
 	onForkSession,
 	onDeleteSession,
 	onEditTitle,
+	onTogglePin,
 	onClose,
 }: {
 	session: SessionInfo;
 	canRestore: boolean;
 	canFork: boolean;
+	isPinned: boolean;
 	currentCwd: string;
 	onRestoreSession: (sessionId: string, cwd: string) => Promise<void>;
 	onForkSession: (sessionId: string, cwd: string) => Promise<void>;
 	onDeleteSession: (sessionId: string) => void | Promise<void>;
 	onEditTitle: (sessionId: string) => void;
+	onTogglePin: (sessionId: string) => void;
 	onClose: () => void;
 }) {
 	const handleRestore = useCallback(() => {
@@ -424,10 +432,26 @@ function SessionItem({
 		onEditTitle(session.sessionId);
 	}, [session.sessionId, onEditTitle]);
 
+	const handleTogglePin = useCallback(() => {
+		onTogglePin(session.sessionId);
+	}, [session.sessionId, onTogglePin]);
+
 	return (
-		<div className="agent-client-session-history-item">
+		<div
+			className={`agent-client-session-history-item${isPinned ? " agent-client-session-history-item-pinned" : ""}`}
+		>
 			<div className="agent-client-session-history-item-content">
 				<div className="agent-client-session-history-item-title">
+					{isPinned && (
+						<span
+							className="agent-client-session-history-item-pin-marker"
+							aria-label="Pinned"
+							title="Pinned"
+							ref={(el) => {
+								if (el) setIcon(el, "pin");
+							}}
+						/>
+					)}
 					<span>
 						{truncateTitle(session.title ?? "Untitled Session")}
 					</span>
@@ -450,6 +474,12 @@ function SessionItem({
 			</div>
 
 			<div className="agent-client-session-history-item-actions">
+				<IconButton
+					iconName={isPinned ? "pin-off" : "pin"}
+					label={isPinned ? "Unpin session" : "Pin session"}
+					className={`agent-client-session-history-action-icon agent-client-session-history-pin-icon${isPinned ? " agent-client-session-history-pin-icon-active" : ""}`}
+					onClick={handleTogglePin}
+				/>
 				<IconButton
 					iconName="pencil"
 					label="Edit session title"
@@ -511,6 +541,8 @@ function SessionHistoryContent({
 	onForkSession,
 	onDeleteSession,
 	onEditTitle,
+	pinnedSessionIds,
+	onTogglePin,
 	onLoadMore,
 	onFetchSessions,
 	onClose,
@@ -573,6 +605,8 @@ function SessionHistoryContent({
 
 	// Filter sessions: hideNonLocalSessions toggle (agent list only) +
 	// case-insensitive substring search against session title.
+	// Then sort pinned sessions to the top (preserving original recency
+	// order within each group).
 	const filteredSessions = React.useMemo(() => {
 		let result = sessions;
 
@@ -587,13 +621,22 @@ function SessionHistoryContent({
 			);
 		}
 
-		return result;
+		// Stable partition: pinned first, unpinned after, original order
+		// preserved within each group.
+		const pinned: SessionInfo[] = [];
+		const unpinned: SessionInfo[] = [];
+		for (const s of result) {
+			if (pinnedSessionIds.has(s.sessionId)) pinned.push(s);
+			else unpinned.push(s);
+		}
+		return [...pinned, ...unpinned];
 	}, [
 		sessions,
 		isUsingLocalSessions,
 		hideNonLocalSessions,
 		localSessionIds,
 		searchQuery,
+		pinnedSessionIds,
 	]);
 
 	// Show preparing message if agent is not ready
@@ -751,6 +794,9 @@ function SessionHistoryContent({
 									session={session}
 									canRestore={canRestore}
 									canFork={canFork}
+									isPinned={pinnedSessionIds.has(
+										session.sessionId,
+									)}
 									currentCwd={currentCwd}
 									onRestoreSession={onRestoreSession}
 									onForkSession={onForkSession}
@@ -758,6 +804,7 @@ function SessionHistoryContent({
 										handleDeleteWithConfirmation
 									}
 									onEditTitle={handleEditWithModal}
+									onTogglePin={onTogglePin}
 									onClose={onClose}
 								/>
 							))}

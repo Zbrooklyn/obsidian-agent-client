@@ -19,8 +19,10 @@ export interface SidebarHeaderProps {
 	isUpdateAvailable: boolean;
 	/** Whether session history is supported (show History button) */
 	hasHistoryCapability?: boolean;
-	/** Callback to create a new chat session */
+	/** Callback to create a new chat session in the SAME view */
 	onNewChat: () => void;
+	/** Callback to open a NEW chat tab/leaf alongside this one */
+	onOpenInNewTab: () => void;
 	/** Callback to export the chat */
 	onExportChat: () => void;
 	/** Callback to show the header menu at the click position */
@@ -107,6 +109,7 @@ function SidebarHeader({
 	isUpdateAvailable,
 	hasHistoryCapability = false,
 	onNewChat,
+	onOpenInNewTab,
 	onExportChat,
 	onShowMenu,
 	onOpenHistory,
@@ -124,8 +127,13 @@ function SidebarHeader({
 				)}
 				<NavActionButton
 					icon="plus"
-					label="New chat"
+					label="New chat in this view"
 					onClick={onNewChat}
+				/>
+				<NavActionButton
+					icon="copy-plus"
+					label="Open chat in new tab"
+					onClick={onOpenInNewTab}
 				/>
 				{onOpenHistory && (
 					<NavActionButton

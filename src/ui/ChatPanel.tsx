@@ -384,15 +384,9 @@ export function ChatPanel({
 			menu.addSeparator();
 
 			// -- Actions section --
-			menu.addItem((item: MenuItem) => {
-				item.setTitle("Open new view")
-					.setIcon("copy-plus")
-					.onClick(() => {
-						void plugin.openNewChatViewWithAgent(
-							plugin.settings.defaultAgentId,
-						);
-					});
-			});
+			// Note: "Open new view" was promoted to a top-level toolbar
+			// button (see ChatHeader's "Open chat in new tab" icon), so
+			// it's intentionally NOT duplicated here.
 
 			menu.addItem((item: MenuItem) => {
 				item.setTitle("Restart agent")
@@ -1087,6 +1081,11 @@ export function ChatPanel({
 				isUpdateAvailable={isUpdateAvailable}
 				hasHistoryCapability={sessionHistory.canShowSessionHistory}
 				onNewChat={() => void handleNewChatWithPersist()}
+				onOpenInNewTab={() =>
+					void plugin.openNewChatViewWithAgent(
+						plugin.settings.defaultAgentId,
+					)
+				}
 				onExportChat={() => void handleExportChat()}
 				onShowMenu={handleShowSidebarMenu}
 				onOpenHistory={handleOpenHistory}

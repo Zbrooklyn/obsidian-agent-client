@@ -114,6 +114,9 @@ export interface AgentClientPluginSettings {
 	};
 	// Locally saved session metadata (for agents without session/list support)
 	savedSessions: SavedSessionInfo[];
+	// IDs of pinned sessions. Pinned sessions sort to the top of the
+	// Session History modal regardless of recency.
+	pinnedSessionIds: string[];
 	// Auto-resume the last active session when the chat view opens.
 	// On by default. Falls back to a fresh session if restore fails.
 	autoResumeLastSession: boolean;
@@ -196,6 +199,7 @@ const DEFAULT_SETTINGS: AgentClientPluginSettings = {
 		fontSize: null,
 	},
 	savedSessions: [],
+	pinnedSessionIds: [],
 	autoResumeLastSession: true,
 	lastActiveSession: null,
 	eagerWarmUp: true,
@@ -1199,6 +1203,11 @@ export default class AgentClientPlugin extends Plugin {
 			savedSessions: Array.isArray(raw.savedSessions)
 				? (raw.savedSessions as SavedSessionInfo[])
 				: D.savedSessions,
+			pinnedSessionIds: Array.isArray(raw.pinnedSessionIds)
+				? (raw.pinnedSessionIds as unknown[]).filter(
+						(x): x is string => typeof x === "string",
+					)
+				: D.pinnedSessionIds,
 			autoResumeLastSession: bool(
 				raw.autoResumeLastSession,
 				D.autoResumeLastSession,

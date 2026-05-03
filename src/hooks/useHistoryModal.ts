@@ -117,7 +117,64 @@ export function useHistoryModal(
 		[sessionHistory.fetchSessions],
 	);
 
+	const handleTogglePin = useCallback(
+		(sessionId: string) => {
+			const ids = new Set(plugin.settings.pinnedSessionIds);
+			if (ids.has(sessionId)) ids.delete(sessionId);
+			else ids.add(sessionId);
+			plugin.settings.pinnedSessionIds = Array.from(ids);
+			void plugin.saveSettings();
+			// Re-render the modal so the new sort order takes effect
+			if (historyModalRef.current) {
+				historyModalRef.current.updateProps({
+					sessions: sessionHistory.sessions,
+					loading: sessionHistory.loading,
+					error: sessionHistory.error,
+					hasMore: sessionHistory.hasMore,
+					currentCwd: vaultPath,
+					canList: sessionHistory.canList,
+					canRestore: sessionHistory.canRestore,
+					canFork: sessionHistory.canFork,
+					isUsingLocalSessions: sessionHistory.isUsingLocalSessions,
+					localSessionIds: sessionHistory.localSessionIds,
+					isAgentReady: isSessionReady,
+					debugMode: debugMode,
+					onRestoreSession: handleRestoreSession,
+					onForkSession: handleForkSession,
+					onDeleteSession: handleDeleteSession,
+					onEditTitle: handleEditTitle,
+					pinnedSessionIds: ids,
+					onTogglePin: handleTogglePin,
+					onLoadMore: handleLoadMore,
+					onFetchSessions: handleFetchSessions,
+				});
+			}
+		},
+		[
+			plugin,
+			sessionHistory.sessions,
+			sessionHistory.loading,
+			sessionHistory.error,
+			sessionHistory.hasMore,
+			sessionHistory.canList,
+			sessionHistory.canRestore,
+			sessionHistory.canFork,
+			sessionHistory.isUsingLocalSessions,
+			sessionHistory.localSessionIds,
+			vaultPath,
+			isSessionReady,
+			debugMode,
+			handleRestoreSession,
+			handleForkSession,
+			handleDeleteSession,
+			handleEditTitle,
+			handleLoadMore,
+			handleFetchSessions,
+		],
+	);
+
 	const handleOpenHistory = useCallback(() => {
+		const pinnedSet = new Set(plugin.settings.pinnedSessionIds);
 		// Create modal if it doesn't exist
 		if (!historyModalRef.current) {
 			historyModalRef.current = new SessionHistoryModal(plugin.app, {
@@ -137,6 +194,31 @@ export function useHistoryModal(
 				onForkSession: handleForkSession,
 				onDeleteSession: handleDeleteSession,
 				onEditTitle: handleEditTitle,
+				pinnedSessionIds: pinnedSet,
+				onTogglePin: handleTogglePin,
+				onLoadMore: handleLoadMore,
+				onFetchSessions: handleFetchSessions,
+			});
+		} else {
+			historyModalRef.current.updateProps({
+				sessions: sessionHistory.sessions,
+				loading: sessionHistory.loading,
+				error: sessionHistory.error,
+				hasMore: sessionHistory.hasMore,
+				currentCwd: vaultPath,
+				canList: sessionHistory.canList,
+				canRestore: sessionHistory.canRestore,
+				canFork: sessionHistory.canFork,
+				isUsingLocalSessions: sessionHistory.isUsingLocalSessions,
+				localSessionIds: sessionHistory.localSessionIds,
+				isAgentReady: isSessionReady,
+				debugMode: debugMode,
+				onRestoreSession: handleRestoreSession,
+				onForkSession: handleForkSession,
+				onDeleteSession: handleDeleteSession,
+				onEditTitle: handleEditTitle,
+				pinnedSessionIds: pinnedSet,
+				onTogglePin: handleTogglePin,
 				onLoadMore: handleLoadMore,
 				onFetchSessions: handleFetchSessions,
 			});
@@ -144,6 +226,7 @@ export function useHistoryModal(
 		historyModalRef.current.open();
 		void sessionHistory.fetchSessions(vaultPath);
 	}, [
+		plugin,
 		plugin.app,
 		sessionHistory.sessions,
 		sessionHistory.loading,
@@ -162,6 +245,7 @@ export function useHistoryModal(
 		handleForkSession,
 		handleDeleteSession,
 		handleEditTitle,
+		handleTogglePin,
 		handleLoadMore,
 		handleFetchSessions,
 	]);
@@ -186,11 +270,14 @@ export function useHistoryModal(
 				onForkSession: handleForkSession,
 				onDeleteSession: handleDeleteSession,
 				onEditTitle: handleEditTitle,
+				pinnedSessionIds: new Set(plugin.settings.pinnedSessionIds),
+				onTogglePin: handleTogglePin,
 				onLoadMore: handleLoadMore,
 				onFetchSessions: handleFetchSessions,
 			});
 		}
 	}, [
+		plugin,
 		sessionHistory.sessions,
 		sessionHistory.loading,
 		sessionHistory.error,
@@ -206,6 +293,7 @@ export function useHistoryModal(
 		handleForkSession,
 		handleDeleteSession,
 		handleEditTitle,
+		handleTogglePin,
 		handleLoadMore,
 		handleFetchSessions,
 	]);

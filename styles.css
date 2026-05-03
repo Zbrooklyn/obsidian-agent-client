@@ -1698,6 +1698,34 @@ If your plugin does not need CSS, delete this file.
 	border: 1px solid var(--background-modifier-border);
 }
 
+/* Pinned session: subtle accent left-border + slightly raised background */
+.agent-client-session-history-item-pinned {
+	border-left: 3px solid var(--text-accent);
+	padding-left: 14px;
+	background: var(--background-secondary-alt);
+}
+
+/* Pin marker (small inline icon next to title for pinned items) */
+.agent-client-session-history-item-pin-marker {
+	display: inline-flex;
+	align-items: center;
+	margin-right: 6px;
+	color: var(--text-accent);
+	vertical-align: middle;
+}
+.agent-client-session-history-item-pin-marker svg {
+	width: 12px;
+	height: 12px;
+}
+
+/* Pin/unpin button — accent color when pinned to make state obvious */
+.agent-client-session-history-pin-icon-active {
+	color: var(--text-accent) !important;
+}
+.agent-client-session-history-pin-icon-active:hover {
+	color: var(--text-accent) !important;
+}
+
 .agent-client-session-history-item-content {
 	flex: 1;
 	min-width: 0;
