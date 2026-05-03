@@ -280,11 +280,18 @@ export function useSessionHistory(
 		onClearMessages,
 	} = options;
 
-	// Derive capability flags from session.agentCapabilities
-	const capabilities: SessionCapabilityFlags = useMemo(
-		() => getSessionCapabilityFlags(session.agentCapabilities),
-		[session.agentCapabilities],
-	);
+	// Derive capability flags. Prefer session.agentCapabilities (set after
+	// useAgentSession.createSession), but fall back to the AcpClient's own
+	// cached lastInitResult so that auto-resume on a freshly-mounted chat
+	// panel — where session.agentCapabilities is still undefined — can still
+	// see canLoad/canResume/canFork. Without this fallback, autoResume
+	// always threw "Session restoration is not supported" on cold mount.
+	const capabilities: SessionCapabilityFlags = useMemo(() => {
+		const fromSession = session.agentCapabilities;
+		if (fromSession) return getSessionCapabilityFlags(fromSession);
+		const fromClient = agentClient.getLastInitResult()?.agentCapabilities;
+		return getSessionCapabilityFlags(fromClient);
+	}, [session.agentCapabilities, agentClient]);
 
 	// State
 	const [sessions, setSessions] = useState<SessionInfo[]>([]);
