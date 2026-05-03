@@ -16,6 +16,7 @@ import { TerminalManager } from "./terminal-handler";
 import { PermissionManager } from "./permission-handler";
 import { AcpHandler } from "./acp-handler";
 import { getLogger, Logger } from "../utils/logger";
+import { warmupLog } from "../utils/warmup-trace";
 import type AgentClientPlugin from "../plugin";
 import {
 	convertWindowsPathToWsl,
@@ -133,7 +134,7 @@ export class AcpClient {
 	 */
 	async initialize(config: AgentConfig): Promise<InitializeResult> {
 		const __t0 = performance.now();
-		console.log(
+		warmupLog(
 			`[WARMUP] ${new Date().toISOString()} AcpClient.initialize CALLED (agent=${config.id}, hasPending=${!!this.pendingInitResult}, isInitialized=${this.isInitializedFlag})`,
 		);
 		// Eager warm-up adoption: if prewarm() already initialized this client
@@ -147,7 +148,7 @@ export class AcpClient {
 			const cached = this.pendingInitResult;
 			this.pendingInitResult = null;
 			this.pendingInitAgentId = null;
-			console.log(
+			warmupLog(
 				`[WARMUP] ${new Date().toISOString()} initialize CACHE HIT — instant adoption (${(performance.now() - __t0).toFixed(0)}ms)`,
 			);
 			this.logger.log(
@@ -168,7 +169,7 @@ export class AcpClient {
 			this.lastInitResult &&
 			this.agentProcess
 		) {
-			console.log(
+			warmupLog(
 				`[WARMUP] ${new Date().toISOString()} initialize IDEMPOTENT HIT — returning cached (${(performance.now() - __t0).toFixed(0)}ms)`,
 			);
 			this.logger.log(
@@ -181,7 +182,7 @@ export class AcpClient {
 		// single tight window (e.g. resume-then-fallback before the first
 		// resolves).
 		if (this.initInFlight) {
-			console.log(
+			warmupLog(
 				`[WARMUP] ${new Date().toISOString()} initialize JOIN IN-FLIGHT — awaiting existing call`,
 			);
 			return this.initInFlight;
@@ -197,7 +198,7 @@ export class AcpClient {
 			rejectInFlight = reject;
 		});
 
-		console.log(
+		warmupLog(
 			`[WARMUP] ${new Date().toISOString()} initialize CACHE MISS — running real init`,
 		);
 		this.logger.log(
@@ -492,7 +493,7 @@ export class AcpClient {
 	 */
 	async newSession(workingDirectory: string): Promise<SessionResult> {
 		const __t0 = performance.now();
-		console.log(
+		warmupLog(
 			`[WARMUP] ${new Date().toISOString()} AcpClient.newSession CALLED (cwd=${workingDirectory}, hasPending=${!!this.pendingSessionResult}, pendingCwd=${this.pendingSessionCwd})`,
 		);
 		// Eager warm-up adoption: if prewarm() created a session for this cwd,
@@ -506,7 +507,7 @@ export class AcpClient {
 			this.pendingSessionResult = null;
 			this.pendingSessionCwd = null;
 			this.currentSessionId = cached.sessionId;
-			console.log(
+			warmupLog(
 				`[WARMUP] ${new Date().toISOString()} newSession CACHE HIT — instant adoption (${(performance.now() - __t0).toFixed(0)}ms)`,
 			);
 			this.logger.log(
@@ -523,13 +524,13 @@ export class AcpClient {
 			this.newSessionInFlight &&
 			this.newSessionInFlight.cwd === workingDirectory
 		) {
-			console.log(
+			warmupLog(
 				`[WARMUP] ${new Date().toISOString()} newSession JOIN IN-FLIGHT — awaiting existing prewarm`,
 			);
 			return this.newSessionInFlight.promise;
 		}
 
-		console.log(
+		warmupLog(
 			`[WARMUP] ${new Date().toISOString()} newSession CACHE MISS — running real newSession`,
 		);
 
@@ -572,6 +573,17 @@ export class AcpClient {
 			this.newSessionInFlight = null;
 			throw error;
 		}
+	}
+
+	/**
+	 * Returns the most recent successful initialize() result, or null if
+	 * the client has never been initialized. Callers that skip a redundant
+	 * initialize() (because isInitialized() is already true) need this to
+	 * still populate session-level state — agentCapabilities, authMethods,
+	 * agentInfo, promptCapabilities — from the cached result.
+	 */
+	getLastInitResult(): InitializeResult | null {
+		return this.lastInitResult;
 	}
 
 	/**

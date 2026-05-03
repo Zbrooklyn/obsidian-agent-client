@@ -213,11 +213,18 @@ export function useAgentSession(
 					effectiveCwd,
 				);
 
+				// If the AcpClient is already initialized for the same
+				// agent (e.g. adopted from the eager warm-up pool), skip
+				// the redundant initialize() call but still pull the cached
+				// InitializeResult so session.agentCapabilities et al. get
+				// populated below. Without this fallback, capability flags
+				// stay undefined and the session-history modal renders the
+				// "agent does not support session restoration" banner.
 				const initResult =
 					!agentClient.isInitialized() ||
 					agentClient.getCurrentAgentId() !== agentId
 						? await agentClient.initialize(agentConfig)
-						: null;
+						: agentClient.getLastInitResult();
 
 				const sessionResult =
 					await agentClient.newSession(effectiveCwd);
