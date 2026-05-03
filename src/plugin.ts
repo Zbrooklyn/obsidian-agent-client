@@ -812,12 +812,13 @@ export default class AgentClientPlugin extends Plugin {
 	}
 
 	/**
-	 * Open a saved conversation. If a tab already shows this exact session,
-	 * focus that tab. Otherwise open a new tab and restore the session there.
+	 * Open a saved conversation in a brand-new tab. Always creates a new
+	 * leaf — never reuses an existing tab, never replaces the current
+	 * chat. Matches "click sidebar entry = new tab" mental model from
+	 * browsers (middle-click) and IDEs.
 	 *
-	 * This is the default behavior for clicking a conversation in the side
-	 * panel — matches browser/IDE tab semantics: never lose the user's
-	 * current chat by replacing it.
+	 * If the user ends up with duplicates of the same conversation, that's
+	 * a deliberate choice (compare two views) — they can close the extras.
 	 */
 	async openConversationInTab(
 		sessionId: string,
@@ -825,23 +826,6 @@ export default class AgentClientPlugin extends Plugin {
 		agentId: string,
 	): Promise<void> {
 		const { workspace } = this.app;
-
-		// Look for an existing tab that already has this session loaded.
-		for (const [viewId, client] of this._acpClients) {
-			if (client.getCurrentSessionId() === sessionId) {
-				const chatLeaves = workspace.getLeavesOfType(VIEW_TYPE_CHAT);
-				const match = chatLeaves.find(
-					(l) =>
-						(l.view as ChatView | undefined)?.viewId === viewId,
-				);
-				if (match) {
-					await workspace.revealLeaf(match);
-					return;
-				}
-			}
-		}
-
-		// Not open anywhere — create a new tab with restore-target state.
 		const newLeaf = this.createNewChatLeaf(true);
 		if (!newLeaf) {
 			new Notice("[Agent Client] Could not open chat view");
